@@ -1,0 +1,173 @@
+[
+  {
+    "name": "check_safety_status",
+    "description": "Check worker safety status and hazard exposure before allowing near-miss report collection.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "session_id": { "type": "string" },
+        "mode": { "type": "string", "enum": ["field_ops", "reporting"] },
+        "worker_id": { "type": "string" },
+        "site_id": { "type": ["string", "null"] },
+        "equipment_id": { "type": ["string", "null"] },
+        "self_reported_clear": { "type": ["boolean", "null"] }
+      },
+      "required": ["session_id", "mode", "worker_id"]
+    }
+  },
+  {
+    "name": "check_safety_threshold",
+    "description": "Check spoken numeric reading against known safety thresholds for parameters.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "parameter": { "type": "string" },
+        "value": { "type": "number" },
+        "unit": { "type": "string" },
+        "context": {
+          "type": "object",
+          "properties": {
+            "procedure": { "type": ["string", "null"] },
+            "step": { "type": ["integer", "null"] },
+            "equipment": { "type": ["string", "null"] },
+            "location": { "type": ["string", "null"] }
+          }
+        }
+      },
+      "required": ["parameter", "value", "unit"]
+    }
+  },
+  {
+    "name": "query_manual_db",
+    "description": "Query technical manual DB for procedure instructions and safe parameter ranges.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "procedure": { "type": "string" },
+        "step": { "type": ["integer", "null"] },
+        "parameter": { "type": ["string", "null"] }
+      },
+      "required": ["procedure"]
+    }
+  },
+  {
+    "name": "get_next_step",
+    "description": "Get next procedure step after worker explicit confirmation of current step.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "procedure": { "type": "string" },
+        "current_step": { "type": "integer" }
+      },
+      "required": ["procedure", "current_step"]
+    }
+  },
+  {
+    "name": "log_maintenance_entry",
+    "description": "Log structured maintenance entry for a component after confirmation.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "component": { "type": "string" },
+        "action": { "type": "string" },
+        "condition": { "type": "string" },
+        "technician_id": { "type": "string" },
+        "location": { "type": ["string", "null"] },
+        "equipment": { "type": ["string", "null"] }
+      },
+      "required": ["component", "action", "condition", "technician_id"]
+    }
+  },
+  {
+    "name": "get_missing_fields",
+    "description": "Check current report schema state and return missing fields with follow-up questions.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "schema_state": { "type": "object" }
+      },
+      "required": ["schema_state"]
+    }
+  },
+  {
+    "name": "search_similar_reports",
+    "description": "Search historical reports for pattern matching and recurring signals.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "embedding_or_text": { "type": "string" },
+        "filters": {
+          "type": "object",
+          "properties": {
+            "site": { "type": ["string", "null"] },
+            "equipment": { "type": ["string", "null"] },
+            "since": { "type": ["string", "null"] }
+          }
+        }
+      },
+      "required": ["embedding_or_text"]
+    }
+  },
+  {
+    "name": "create_near_miss",
+    "description": "Create a confirmed near-miss report requiring worker confirmation and safe status.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "report": {
+          "type": "object",
+          "properties": {
+            "location": { "type": "string" },
+            "equipment": { "type": "string" },
+            "hazard_type": { "type": "string" },
+            "injury": { "type": "string" },
+            "narrative": { "type": "string" },
+            "worker_id": { "type": "string" },
+            "provenance": { "type": "object" }
+          },
+          "required": ["location", "equipment", "hazard_type", "injury", "narrative"]
+        },
+        "idempotency_key": { "type": "string" }
+      },
+      "required": ["report", "idempotency_key"]
+    }
+  },
+  {
+    "name": "notify_safety_contact",
+    "description": "Route safety notification to site contact roles.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "report_id": { "type": "string" },
+        "site_policy": {
+          "type": "object",
+          "properties": {
+            "auto_notify_roles": { "type": "array", "items": { "type": "string" } },
+            "channel": { "type": "string" }
+          }
+        }
+      },
+      "required": ["report_id"]
+    }
+  },
+  {
+    "name": "draft_corrective_action",
+    "description": "Generate a pending corrective action draft for supervisor review.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "report_id": { "type": "string" },
+        "pattern_signal": {
+          "type": "object",
+          "properties": {
+            "recurring": { "type": "boolean" },
+            "count": { "type": "integer" },
+            "sentence": { "type": "string" }
+          },
+          "required": ["recurring", "count", "sentence"]
+        }
+      },
+      "required": ["report_id", "pattern_signal"]
+    }
+  }
+]
