@@ -214,7 +214,7 @@ class ToolDispatcher:
 
             existing = self.db.get_report_by_idempotency_key(idempotency_key)
             if existing:
-                return {"report_id": existing["id"], "created": True, "duplicate": True}
+                return {"report_id": existing["id"], "created": False, "duplicate": True}
 
             report_id = self.db.create_report({
                 "location": report_payload.get("location"),

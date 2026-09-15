@@ -241,6 +241,7 @@ BOTH MODES
     "duplicate": "boolean"
   }
   ```
+  *(Note on duplicate replay: when an existing report matching the idempotency_key is found, the system returns `{ "report_id": existing_id, "created": false, "duplicate": true }`)*.
 
 ### 9. `notify_safety_contact`
 - **Side Effect**: External notification dispatch; **Requires confirmation_gate or supervisor auto-notify policy**.

@@ -176,7 +176,7 @@ class TestQA001to004(unittest.TestCase):
             }
         })
 
-        self.assertTrue(res2["created"])
+        self.assertFalse(res2["created"])
         self.assertTrue(res2["duplicate"])
         self.assertEqual(res1["report_id"], res2["report_id"])
 

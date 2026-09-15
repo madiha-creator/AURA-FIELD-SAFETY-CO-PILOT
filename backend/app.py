@@ -8,6 +8,7 @@ from integrations.database import get_database
 from backend.audit_logger import AuditLogger
 from backend.state_manager import get_state_manager
 import backend.tool_dispatcher as tool_dispatcher_mod
+from audio.token_routes import register_token_routes
 
 app = Flask(__name__)
 CORS(app)
@@ -15,6 +16,9 @@ CORS(app)
 db = get_database()
 audit_logger = AuditLogger()
 state_manager = get_state_manager()
+
+# Register /v1/token route
+register_token_routes(app)
 
 @app.route("/health", methods=["GET"])
 def health():
@@ -32,7 +36,6 @@ def list_reviews():
 
     reports = db.get_reports_list(limit=100)
 
-    # Filter by query params if present
     filtered = []
     for r in reports:
         if status and r.get("status") != status:
@@ -51,9 +54,7 @@ def get_review_detail(report_id):
     if not report:
         return jsonify({"error": "Report not found"}), 404
 
-    # Get associated corrective action draft if any
     ca = db.get_corrective_action_by_report(report_id)
-    # Get similar reports
     similar = db.search_similar_reports_db(report.get("narrative", "") or report.get("hazard_type", ""), site=report.get("location"))
 
     return jsonify({
@@ -107,7 +108,6 @@ def edit_review(report_id):
 
     updated = db.update_report_fields(report_id, changes)
 
-    # Write explicit audit event for supervisor edit
     audit_logger.log_action(
         user_id=data.get("supervisor_id", "supervisor_1"),
         action="report_edited_by_supervisor",
