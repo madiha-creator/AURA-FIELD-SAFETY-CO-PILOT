@@ -40,9 +40,9 @@ def list_reviews():
     for r in reports:
         if status and r.get("status") != status:
             continue
-        if site and r.get("location") != site:
+        if site and site.lower() not in r.get("location", "").lower():
             continue
-        if equipment and r.get("equipment") != equipment:
+        if equipment and equipment.lower() not in r.get("equipment", "").lower():
             continue
         filtered.append(r)
 
@@ -69,9 +69,13 @@ def approve_review(report_id):
     data = request.json or {}
     send_notify = data.get("notify_safety_contact", False)
 
+    report = db.get_report_detail(report_id)
+    if not report:
+        return jsonify({"error": "Report not found"}), 404
+
     success = db.update_report_status(report_id, "approved")
     if not success:
-        return jsonify({"error": "Report not found or invalid status"}), 404
+        return jsonify({"error": "Failed to update report status"}), 400
 
     audit_logger.log_action(
         user_id=data.get("supervisor_id", "supervisor_1"),
@@ -82,10 +86,13 @@ def approve_review(report_id):
     notified_roles = []
     if send_notify:
         notified_roles = ["safety_officer", "site_manager"]
+        # Use report's actual location/site dynamically (do not hardcode "Site Main")
+        report_site = report.get("location") or "Unspecified Site"
         db.create_notification({
             "alert_type": "near_miss_approved",
             "severity": "medium",
-            "location": "Site Main",
+            "location": report_site,
+            "equipment": report.get("equipment"),
             "recipient_role": "safety_officer",
             "sender_id": data.get("supervisor_id", "supervisor_1")
         })
@@ -100,7 +107,10 @@ def approve_review(report_id):
 def edit_review(report_id):
     data = request.json or {}
     changes = data.get("changes", {})
-    reason = data.get("reason", "Supervisor correction")
+    reason = data.get("reason")
+
+    if not reason or not reason.strip():
+        return jsonify({"error": "Reason is required for editing a report"}), 400
 
     report = db.get_report_detail(report_id)
     if not report:
@@ -124,7 +134,7 @@ def edit_review(report_id):
 def reject_review(report_id):
     data = request.json or {}
     reason = data.get("reason")
-    if not reason:
+    if not reason or not reason.strip():
         return jsonify({"error": "Reason is required for rejection"}), 400
 
     success = db.update_report_status(report_id, "rejected")

@@ -7,7 +7,7 @@ Persistent state tracking that survives session interruption/reopen.
 import json
 import uuid
 from abc import ABC, abstractmethod
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional, Any
 from dataclasses import dataclass, field, asdict
 from enum import Enum
@@ -42,7 +42,7 @@ class ProvenanceSource(Enum):
 class ProvenanceField:
     value: Any
     source: ProvenanceSource
-    timestamp: str = field(default_factory=lambda: datetime.utcnow().isoformat())
+    timestamp: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     confidence: Optional[float] = None
 
     def to_dict(self) -> dict:
@@ -78,8 +78,8 @@ class ConversationState:
     session_id: str
     user_id: str
     mode: SessionMode = SessionMode.IDLE
-    created_at: str = field(default_factory=lambda: datetime.utcnow().isoformat())
-    updated_at: str = field(default_factory=lambda: datetime.utcnow().isoformat())
+    created_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    updated_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     current_step: Optional[int] = None
     total_steps: Optional[int] = None
     steps: list = field(default_factory=list)
@@ -118,59 +118,41 @@ class StateBackend(ABC):
 
 
 class InMemoryStateBackend(StateBackend):
-    def __init__(self):
-        self._store: dict[str, ConversationState] = {}
+    def __init__(self, ttl_seconds: int = 30):
+        self._store: dict[str, tuple[ConversationState, float]] = {}
+        self.ttl_seconds = ttl_seconds
 
     def get(self, session_id: str) -> Optional[ConversationState]:
-        return self._store.get(session_id)
+        entry = self._store.get(session_id)
+        if not entry:
+            return None
+        state, updated_timestamp = entry
+        import time
+        if time.time() - updated_timestamp > self.ttl_seconds:
+            # Session expired after 30s resume window
+            self.delete(session_id)
+            return None
+        return state
 
     def set(self, state: ConversationState) -> None:
-        state.updated_at = datetime.utcnow().isoformat()
-        self._store[state.session_id] = state
+        import time
+        state.updated_at = datetime.now(timezone.utc).isoformat()
+        self._store[state.session_id] = (state, time.time())
 
     def delete(self, session_id: str) -> None:
         self._store.pop(session_id, None)
 
     def exists(self, session_id: str) -> bool:
-        return session_id in self._store
-
-
-class RedisStateBackend(StateBackend):
-    def __init__(self, redis_url: Optional[str] = None, ttl_seconds: int = 86400):
-        config = get_config()
-        redis_url = redis_url or getattr(config, "REDIS_URL", None)
-        self.client = redis.from_url(redis_url) if (redis and redis_url) else None
-        self.ttl = ttl_seconds
-
-    def _key(self, session_id: str) -> str:
-        return f"aura:session:{session_id}"
-
-    def get(self, session_id: str) -> Optional[ConversationState]:
-        if not self.client:
-            return None
-        data = self.client.get(self._key(session_id))
-        return ConversationState.from_dict(json.loads(data)) if data else None
-
-    def set(self, state: ConversationState) -> None:
-        if not self.client:
-            return
-        state.updated_at = datetime.utcnow().isoformat()
-        self.client.setex(self._key(state.session_id), self.ttl, json.dumps(state.to_dict()))
-
-    def delete(self, session_id: str) -> None:
-        if self.client:
-            self.client.delete(self._key(session_id))
-
-    def exists(self, session_id: str) -> bool:
-        return (self.client.exists(self._key(session_id)) > 0) if self.client else False
+        return self.get(session_id) is not None
 
 
 class StateManager:
-    def __init__(self, backend: Optional[StateBackend] = None):
+    def __init__(self, backend: Optional[StateBackend] = None, audit_logger = None):
         if backend is None:
             self.backend = InMemoryStateBackend()
         else:
             self.backend = backend
+        self.audit_logger = audit_logger
 
     def create_session(self, user_id: str, session_id: Optional[str] = None) -> ConversationState:
         session_id = session_id or str(uuid.uuid4())
@@ -209,6 +191,32 @@ class StateManager:
         setattr(state.report, field_name, field_obj)
         self.update_state(state)
         return state
+
+    def correct_report_field(
+        self,
+        session_id: str,
+        field_name: str,
+        new_value: Any,
+        source: ProvenanceSource = ProvenanceSource.SAID,
+    ) -> Optional[ConversationState]:
+        """Behavioral correction helper: updates report field & writes field_corrected audit log."""
+        state = self.get_state(session_id)
+        if not state:
+            return None
+
+        old_field = getattr(state.report, field_name, None)
+        old_val = old_field.value if old_field else None
+
+        self.update_report_field(session_id, field_name, new_value, source)
+
+        if self.audit_logger:
+            self.audit_logger.log_action(
+                user_id=state.user_id,
+                action="field_corrected",
+                session_id=session_id,
+                metadata={"field": field_name, "old_value": old_val, "new_value": new_value}
+            )
+        return self.get_state(session_id)
 
 
 _state_manager: Optional[StateManager] = None

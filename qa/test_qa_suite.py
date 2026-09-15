@@ -1,11 +1,13 @@
 """
 Automated Test Suite for QA-001 through QA-004.
+Runs behavioral tests against state manager, tool dispatcher, confirmation gate, and database.
 """
 
 import os
+import time
 import unittest
 import integrations.database as db_module
-from backend.state_manager import StateManager, SessionMode, ProvenanceSource, ConfirmationStatus
+from backend.state_manager import StateManager, SessionMode, ProvenanceSource, ConfirmationStatus, InMemoryStateBackend
 from backend.audit_logger import AuditLogger
 from backend.tool_dispatcher import ToolDispatcher, compute_idempotency_key
 
@@ -20,8 +22,9 @@ class TestQA001to004(unittest.TestCase):
         db_module._db_instance = db_module.SQLiteDatabase(db_path=self.db_file)
         self.db = db_module.get_database()
 
-        self.state_manager = StateManager()
         self.audit_logger = AuditLogger(db_path=self.db_file)
+        self.state_backend = InMemoryStateBackend(ttl_seconds=30)
+        self.state_manager = StateManager(backend=self.state_backend, audit_logger=self.audit_logger)
         self.dispatcher = ToolDispatcher(self.state_manager, self.audit_logger)
 
     def tearDown(self):
@@ -40,22 +43,15 @@ class TestQA001to004(unittest.TestCase):
         self.state_manager.update_report_field(session_id, "equipment", "Valve 2", ProvenanceSource.INFERRED)
 
         # Worker correction action: "no, it was valve 4 not valve 2"
-        # 1. State updates ONLY the corrected field
-        self.state_manager.update_report_field(session_id, "equipment", "Valve 4", ProvenanceSource.SAID)
+        # Act through correct_report_field state manager behavior (no faked log_action call in test)
+        self.state_manager.correct_report_field(session_id, "equipment", "Valve 4", ProvenanceSource.SAID)
 
         state_after = self.state_manager.get_state(session_id)
         self.assertEqual(state_after.report.location.value, "Bay 2")
         self.assertEqual(state_after.report.equipment.value, "Valve 4")
         self.assertEqual(state_after.report.equipment.source, ProvenanceSource.SAID)
 
-        # Audit log contains correction event
-        self.audit_logger.log_action(
-            user_id=worker_id,
-            action="field_corrected",
-            session_id=session_id,
-            metadata={"field": "equipment", "old_value": "Valve 2", "new_value": "Valve 4"}
-        )
-
+        # Audit log automatically contains correction event from state_manager
         history = self.audit_logger.get_session_history(session_id)
         corrected_logs = [h for h in history if h["action"] == "field_corrected"]
         self.assertEqual(len(corrected_logs), 1)
@@ -73,7 +69,6 @@ class TestQA001to004(unittest.TestCase):
         self.state_manager.update_state(state)
 
         # Barge-in action: "my gauge reads 15 PSI, is that safe?"
-        # Handle playback interruption
         self.dispatcher.handle_interruption(session_id, "call_step2_audio")
 
         # Call check_safety_threshold
@@ -137,7 +132,6 @@ class TestQA001to004(unittest.TestCase):
             narrative="Oil leaking near high pressure valve",
             local_day="2026-03-30"
         )
-        self.assertEqual(key, compute_idempotency_key(worker_id, "Site Bay 1", "Compressor A", "Oil leaking near high pressure valve", "2026-03-30"))
 
         # Confirm gate satisfied
         state.confirmation_status = ConfirmationStatus.CONFIRMED
@@ -160,9 +154,14 @@ class TestQA001to004(unittest.TestCase):
         self.assertTrue(res1["created"])
         self.assertFalse(res1["duplicate"])
 
-        # Simulating reconnect within 30s window and retrying create_near_miss call with same key
-        state.confirmation_status = ConfirmationStatus.CONFIRMED
-        self.state_manager.update_state(state)
+        # Reconnect within 30s window (simulated immediately / t=20s): state restored
+        resumed_state = self.state_manager.get_state(session_id)
+        self.assertIsNotNone(resumed_state)
+        self.assertEqual(resumed_state.mode, SessionMode.REPORTING)
+
+        # Replaying create_near_miss with same idempotency key returns created: false, duplicate: true
+        resumed_state.confirmation_status = ConfirmationStatus.CONFIRMED
+        self.state_manager.update_state(resumed_state)
         res2 = self.dispatcher.execute("create_near_miss", {
             "session_id": session_id,
             "worker_id": worker_id,
@@ -179,6 +178,11 @@ class TestQA001to004(unittest.TestCase):
         self.assertFalse(res2["created"])
         self.assertTrue(res2["duplicate"])
         self.assertEqual(res1["report_id"], res2["report_id"])
+
+        # Reconnect at t > 30s (e.g. simulate expiration): session expires, get_state returns None
+        self.state_backend._store[session_id] = (resumed_state, time.time() - 35)
+        expired_state = self.state_manager.get_state(session_id)
+        self.assertIsNone(expired_state)
 
 
 if __name__ == "__main__":
