@@ -1,0 +1,35 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "IncidentReportSchema",
+  "type": "object",
+  "required": ["location", "equipment", "hazard_type", "injury", "narrative"],
+  "properties": {
+    "location": { "$ref": "#/definitions/FieldTag" },
+    "equipment": { "$ref": "#/definitions/FieldTag" },
+    "hazard_type": { "$ref": "#/definitions/FieldTag" },
+    "injury": { "$ref": "#/definitions/FieldTag" },
+    "narrative": { "$ref": "#/definitions/FieldTag" },
+    "site_id": { "$ref": "#/definitions/FieldTag" },
+    "severity": { "$ref": "#/definitions/FieldTag" },
+    "witnesses": { "$ref": "#/definitions/FieldTag" },
+    "immediate_actions": { "$ref": "#/definitions/FieldTag" },
+    "time_local": { "$ref": "#/definitions/FieldTag" }
+  },
+  "definitions": {
+    "FieldTag": {
+      "type": "object",
+      "properties": {
+        "value": {},
+        "status": {
+          "type": "string",
+          "enum": ["missing", "you_said", "ai_inferred", "confirmed"]
+        },
+        "provenance": {
+          "type": "string",
+          "enum": ["worker", "agent", "system"]
+        }
+      },
+      "required": ["status", "provenance"]
+    }
+  }
+}

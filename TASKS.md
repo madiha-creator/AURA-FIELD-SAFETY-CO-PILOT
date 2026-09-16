@@ -16,15 +16,15 @@ Fill in **Owner** and **Status** as the team claims tasks (Status: `unclaimed` /
 | BE-003 | Implement tool.call → tool.result round trip, incl. interrupted-reply handling | Backend | | unclaimed |
 | BE-004 | Build confirmation-gate logic before any write action | Backend | | unclaimed |
 | BE-005 | Build audit history logging (what was said, changed, confirmed, created) | Backend | | unclaimed |
-| SAF-001 | Define safe-range reference data per procedure/parameter | Safety Logic | | unclaimed |
-| SAF-002 | Implement check_safety_threshold — flags unsafe spoken readings | Safety Logic | | unclaimed |
-| SAF-003 | Implement check_safety_status — blocks reporting while worker is exposed | Safety Logic | | unclaimed |
-| SAF-004 | Define decision boundaries: automatic vs confirm vs supervisor-approve vs never | Safety Logic | | unclaimed |
-| DAT-001 | Build/index vector database of technical manuals | Data/Retrieval | | unclaimed |
-| DAT-002 | Implement query_manual_db similarity search + safe-range context return | Data/Retrieval | | unclaimed |
-| DAT-003 | Design incident report schema with field-status tags | Data/Retrieval | | unclaimed |
-| DAT-004 | Implement get_missing_fields adaptive follow-up logic | Data/Retrieval | | unclaimed |
-| DAT-005 | Build embedding + similarity search for incident pattern matching | Data/Retrieval | | unclaimed |
+| SAF-001 | Define safe-range reference data per procedure/parameter | Safety Logic | rwilliamspbg-ops | in review |
+| SAF-002 | Implement check_safety_threshold — flags unsafe spoken readings | Safety Logic | rwilliamspbg-ops | in review |
+| SAF-003 | Implement check_safety_status — blocks reporting while worker is exposed | Safety Logic | rwilliamspbg-ops | in review |
+| SAF-004 | Define decision boundaries: automatic vs confirm vs supervisor-approve vs never | Safety Logic | rwilliamspbg-ops | in review |
+| DAT-001 | Build/index vector database of technical manuals | Data/Retrieval | rwilliamspbg-ops | in review |
+| DAT-002 | Implement query_manual_db similarity search + safe-range context return | Data/Retrieval | rwilliamspbg-ops | in review |
+| DAT-003 | Design incident report schema with field-status tags | Data/Retrieval | rwilliamspbg-ops | in review |
+| DAT-004 | Implement get_missing_fields adaptive follow-up logic | Data/Retrieval | rwilliamspbg-ops | in review |
+| DAT-005 | Build embedding + similarity search for incident pattern matching | Data/Retrieval | rwilliamspbg-ops | in review |
 | INT-001 | Implement log_maintenance_entry write to Salesforce/Jira/SQL | Integrations | | unclaimed |
 | INT-002 | Implement create_near_miss write + idempotency handling | Integrations | | unclaimed |
 | INT-003 | Implement notify_safety_contact per site policy | Integrations | | unclaimed |

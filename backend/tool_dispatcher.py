@@ -1,5 +1,5 @@
 """
-BE-003 & INT-001..004: Tool Dispatcher matching locked SAF contracts.
+BE-003 & INT-001..004 & SAF-001..004 & DAT-001..005: Tool Dispatcher integrated with Safety and Data modules.
 """
 
 import hashlib
@@ -14,6 +14,13 @@ from backend.confirmation_gate import ConfirmationGate, WriteAction
 from backend.audit_logger import AuditLogger, AuditAction
 from integrations.database import get_database
 
+from safety.threshold import check_safety_threshold as saf_check_safety_threshold
+from safety.status import check_safety_status as saf_check_safety_status
+from safety.decision_boundaries import classify_action as saf_classify_action
+from data.query_manual_db import query_manual_db as dat_query_manual_db
+from data.missing_fields import get_missing_fields as dat_get_missing_fields
+from data.similar_reports import search_similar_incidents as dat_search_similar_incidents
+
 
 def compute_idempotency_key(worker_id: str, site: str, equipment: str, narrative: str, local_day: str = None) -> str:
     """Computes stable idempotency key hash(worker_id + site + equipment + normalized_narrative + local_day)."""
@@ -27,7 +34,7 @@ def compute_idempotency_key(worker_id: str, site: str, equipment: str, narrative
 class ToolDispatcher:
     """
     Central tool dispatcher managing tool.call -> execute -> tool.result.
-    Implements locked SAF contracts for all 10 tools.
+    Integrates safety and retrieval modules while preserving tool interfaces and contracts.
     """
 
     def __init__(self, state_manager: StateManager, audit_logger: AuditLogger):
@@ -62,82 +69,43 @@ class ToolDispatcher:
             site_id = arguments.get("site_id")
             equipment_id = arguments.get("equipment_id")
             self_reported_clear = arguments.get("self_reported_clear")
+            last_threshold = arguments.get("last_threshold")
+            hazard_flags = arguments.get("hazard_flags")
 
-            if self_reported_clear is False:
-                return {
-                    "safe_to_report": False,
-                    "exposure_state": "exposed",
-                    "reason": "Worker is self-reported exposed to active hazard.",
-                    "recommended_action": "evacuate_or_isolate"
-                }
-            return {
-                "safe_to_report": True,
-                "exposure_state": "clear",
-                "reason": "No active hazard detected.",
-                "recommended_action": "proceed"
-            }
+            return saf_check_safety_status(
+                mode=mode,
+                site_id=site_id,
+                equipment_id=equipment_id,
+                self_reported_clear=self_reported_clear,
+                last_threshold=last_threshold,
+                hazard_flags=hazard_flags
+            )
 
         # 2. check_safety_threshold
         elif tool_name == "check_safety_threshold":
             parameter = arguments.get("parameter", "")
             val = float(arguments.get("value", 0))
-            unit = arguments.get("unit", "")
-            context = arguments.get("context", {})
+            unit = arguments.get("unit")
+            context = arguments.get("context")
 
-            ranges = {
-                "pressure": {"min": 4.0, "max": 10.0, "unit": "PSI"},
-                "coolant line pressure": {"min": 4.0, "max": 10.0, "unit": "PSI"},
-                "temperature": {"min": 50.0, "max": 180.0, "unit": "F"},
-            }
-
-            key = parameter.lower()
-            if key not in ranges and context and context.get("procedure"):
-                key = "pressure"
-
-            if key in ranges:
-                r = ranges[key]
-                min_v, max_v = r["min"], r["max"]
-                in_range = min_v <= val <= max_v
-                dev_pct = 0.0
-                if val > max_v:
-                    dev_pct = round(((val - max_v) / (max_v - min_v if max_v != min_v else 1)) * 100, 1)
-                elif val < min_v:
-                    dev_pct = round(((min_v - val) / (max_v - min_v if max_v != min_v else 1)) * 100, 1)
-
-                severity = "ok"
-                if not in_range:
-                    severity = "critical" if dev_pct > 30 else "warn"
-
-                msg = f"Reading {val} {unit} is safe." if in_range else f"WARNING: {parameter} is {val} {unit}, which exceeds maximum safe threshold of {max_v} {unit} by {dev_pct}%!"
-                return {
-                    "in_range": in_range,
-                    "measured_value": val,
-                    "unit": unit,
-                    "expected_range": {"min": min_v, "max": max_v},
-                    "deviation_pct": dev_pct,
-                    "severity": severity,
-                    "message": msg
-                }
-            else:
-                return {
-                    "in_range": False,
-                    "measured_value": val,
-                    "unit": unit,
-                    "expected_range": {"min": 0, "max": 0},
-                    "deviation_pct": 0,
-                    "severity": "unknown",
-                    "message": f"Unknown safety range for {parameter}. Please confirm equipment and unit."
-                }
+            return saf_check_safety_threshold(
+                parameter=parameter,
+                value=val,
+                unit=unit,
+                context=context
+            )
 
         # 3. query_manual_db
         elif tool_name == "query_manual_db":
             procedure = arguments.get("procedure", "Standard Procedure")
             step = arguments.get("step")
-            return {
-                "excerpt": f"Manual instructions for {procedure} step {step or 1}: Ensure valve is isolated and verify pressure gauge.",
-                "step_text": f"Step {step or 1}: Check gauge pressure.",
-                "related_ranges": [{"parameter": "coolant line pressure", "min": 4.0, "max": 10.0, "unit": "PSI"}]
-            }
+            parameter = arguments.get("parameter")
+
+            return dat_query_manual_db(
+                procedure=procedure,
+                step=step,
+                parameter=parameter
+            )
 
         # 4. get_next_step (Requires worker confirmation of current step)
         elif tool_name == "get_next_step":
@@ -153,6 +121,10 @@ class ToolDispatcher:
 
         # 5. log_maintenance_entry (Write tool -> confirmation gate)
         elif tool_name == "log_maintenance_entry":
+            classification = saf_classify_action("log_maintenance_entry", context=arguments)
+            if not classification.get("allowed", True):
+                return {"error": "Action blocked by safety decision boundary policy."}
+
             if state and state.confirmation_status != ConfirmationStatus.CONFIRMED:
                 return self.confirmation_gate.request_confirmation(
                     action=WriteAction.LOG_MAINTENANCE_ENTRY,
@@ -172,28 +144,32 @@ class ToolDispatcher:
         # 6. get_missing_fields
         elif tool_name == "get_missing_fields":
             schema_state = arguments.get("schema_state", {})
-            required_fields = {
-                "location": "Where did the near miss occur?",
-                "equipment": "What equipment was involved?",
-                "hazard_type": "What type of hazard was observed?",
-                "injury": "Were there any injuries?"
-            }
-            missing = []
-            for field, q in required_fields.items():
-                val = schema_state.get(field)
-                if not val or (isinstance(val, dict) and not val.get("value")):
-                    missing.append({"field": field, "question": q})
-            return {"missing": missing, "complete": len(missing) == 0}
+            return dat_get_missing_fields(schema_state)
 
         # 7. search_similar_reports
         elif tool_name == "search_similar_reports":
             text = arguments.get("embedding_or_text", "")
             filters = arguments.get("filters", {})
-            res = self.db.search_similar_reports_db(text, site=filters.get("site"), equipment=filters.get("equipment"))
-            return res
+            equipment = filters.get("equipment") or arguments.get("equipment")
+            hazard_type = filters.get("hazard_type") or arguments.get("hazard_type")
+            site = filters.get("site") or arguments.get("site")
 
-        # 8. create_near_miss (Write tool -> requires confirmation_gate AND check_safety_status.safe_to_report)
+            return dat_search_similar_incidents(
+                query_text=text,
+                equipment=equipment,
+                hazard_type=hazard_type,
+                site=site
+            )
+
+        # 8. create_near_miss (Write tool -> requires check_safety_status & confirmation_gate)
         elif tool_name == "create_near_miss":
+            classification = saf_classify_action("create_near_miss", context=arguments)
+            if not classification.get("allowed", True):
+                return {
+                    "error": "Cannot submit near-miss report: Worker safety status is exposed or unverified.",
+                    "safe_to_report": False
+                }
+
             if state and state.confirmation_status != ConfirmationStatus.CONFIRMED:
                 return self.confirmation_gate.request_confirmation(
                     action=WriteAction.CREATE_NEAR_MISS,
@@ -231,6 +207,10 @@ class ToolDispatcher:
 
         # 9. notify_safety_contact (Write tool)
         elif tool_name == "notify_safety_contact":
+            classification = saf_classify_action("notify_safety_contact", context=arguments)
+            if not classification.get("allowed", True):
+                return {"error": "Cannot notify safety contact without a valid report_id."}
+
             if state and state.confirmation_status != ConfirmationStatus.CONFIRMED:
                 return self.confirmation_gate.request_confirmation(
                     action=WriteAction.NOTIFY_SAFETY_CONTACT,
@@ -253,6 +233,10 @@ class ToolDispatcher:
 
         # 10. draft_corrective_action (Draft only, pending supervisor)
         elif tool_name == "draft_corrective_action":
+            classification = saf_classify_action("draft_corrective_action", context=arguments)
+            if not classification.get("allowed", True):
+                return {"error": "Drafting corrective action blocked by safety policy."}
+
             report_id = arguments.get("report_id")
             pattern_signal = arguments.get("pattern_signal", {})
             sentence = pattern_signal.get("sentence", "Recurring hazard detected.")
