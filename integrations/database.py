@@ -248,26 +248,8 @@ class SQLiteDatabase(DatabaseInterface):
         return dict(row) if row else None
 
     def search_similar_reports_db(self, query: str, site: str = None, equipment: str = None) -> dict:
-        conn = sqlite3.connect(self.db_path)
-        conn.row_factory = sqlite3.Row
-        rows = conn.execute("SELECT * FROM reports LIMIT 5").fetchall()
-        conn.close()
-        matches = []
-        for r in rows:
-            matches.append({
-                "id": r["id"],
-                "similarity": 0.89,
-                "summary": f"{r['hazard_type']} involving {r['equipment']}",
-                "date": r["created_at"]
-            })
-        return {
-            "matches": matches,
-            "pattern_signal": {
-                "recurring": len(matches) > 1,
-                "count": len(matches),
-                "sentence": f"{len(matches)} similar incidents recorded for equipment."
-            }
-        }
+        from data.similar_reports import search_similar_incidents
+        return search_similar_incidents(query_text=query, site=site, equipment=equipment)
 
     def get_patterns_list(self) -> list[dict]:
         conn = sqlite3.connect(self.db_path)
