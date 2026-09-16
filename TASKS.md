@@ -32,12 +32,12 @@ Fill in **Owner** and **Status** as the team claims tasks (Status: `unclaimed` /
 | FE-001 | Build mode-aware app UI: procedure-step view / report-field view | Frontend | | unclaimed |
 | FE-002 | Build live transcript + safety-alert banner UI | Frontend | | unclaimed |
 | FE-003 | Build text/keyboard fallback input path | Frontend | | unclaimed |
-| FE-004 | Build supervisor review UI: approve/edit/reject actions | Frontend | | unclaimed |
-| QA-001 | Test interruption handling end-to-end (correcting a report field mid-flow) | Testing/QA | | unclaimed |
-| QA-002 | Test interruption handling mid-procedure-step playback | Testing/QA | | unclaimed |
-| QA-003 | Test safety-sentinel triggering on out-of-range spoken values | Testing/QA | | unclaimed |
-| QA-004 | Test session resume after disconnect (30s window) | Testing/QA | | unclaimed |
-| DOC-001 | Write example system prompt and tool schema reference for the team | Docs | | unclaimed |
+| FE-004 | Build supervisor review UI: approve/edit/reject actions | Frontend | rwilliamspbg-ops | in review |
+| QA-001 | Test interruption handling end-to-end (correcting a report field mid-flow) | Testing/QA | rwilliamspbg-ops | in review |
+| QA-002 | Test interruption handling mid-procedure-step playback | Testing/QA | rwilliamspbg-ops | in review |
+| QA-003 | Test safety-sentinel triggering on out-of-range spoken values | Testing/QA | rwilliamspbg-ops | in review |
+| QA-004 | Test session resume after disconnect (30s window) | Testing/QA | rwilliamspbg-ops | in review |
+| DOC-001 | Write example system prompt and tool schema reference for the team | Docs | rwilliamspbg-ops | in review |
 | DOC-002 | Document decision boundaries and escalation rules for reviewers | Docs | | unclaimed |
 
 ## Suggested known assignment
