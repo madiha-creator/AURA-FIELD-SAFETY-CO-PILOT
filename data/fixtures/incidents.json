@@ -1,0 +1,82 @@
+[
+  {
+    "id": "INC-1001",
+    "site": "Site Bay 2",
+    "equipment": "Coolant Line Loop A",
+    "hazard_type": "Pressure Leak",
+    "summary": "Coolant hose fitting spray near high voltage pump motor.",
+    "narrative": "Worker observed high coolant line pressure causing fitting spray near secondary cooling loop motor."
+  },
+  {
+    "id": "INC-1002",
+    "site": "Site Bay 2",
+    "equipment": "Coolant Line Loop A",
+    "hazard_type": "Pressure Leak",
+    "summary": "Secondary coolant line fitting spraying fluid under high pressure.",
+    "narrative": "Secondary coolant fitting ruptured slightly and sprayed coolant across walkway in Site Bay 2."
+  },
+  {
+    "id": "INC-1003",
+    "site": "Site Bay 2",
+    "equipment": "Hydraulic Pump Unit 3",
+    "hazard_type": "High Pressure",
+    "summary": "Hydraulic pump relief valve failure causing high pressure surge.",
+    "narrative": "Pressure surge in main hydraulic pump exceeded 3500 PSI due to stuck relief valve."
+  },
+  {
+    "id": "INC-1004",
+    "site": "North Substation",
+    "equipment": "Hydraulic Pump Unit 3",
+    "hazard_type": "Oil Leak",
+    "summary": "Hydraulic fluid pooling around main reservoir tank.",
+    "narrative": "Hydraulic fluid leak found under reservoir drain plug on Unit 3."
+  },
+  {
+    "id": "INC-1005",
+    "site": "Site Bay 2",
+    "equipment": "Diesel Generator Aux 1",
+    "hazard_type": "Excessive Vibration",
+    "summary": "Generator housing loose mounting bolt causing severe vibration.",
+    "narrative": "High vibration frequency recorded on generator frame during start sequence."
+  },
+  {
+    "id": "INC-1006",
+    "site": "West Plant",
+    "equipment": "Diesel Generator Aux 1",
+    "hazard_type": "Excessive Vibration",
+    "summary": "Generator excitation coil housing loose and vibrating heavily.",
+    "narrative": "Excessive vibration during generator testing near main breaker."
+  },
+  {
+    "id": "INC-1007",
+    "site": "Site Bay 2",
+    "equipment": "Chemical Line Valve V-101",
+    "hazard_type": "Corrosive Chemical Exposure",
+    "summary": "Valve seal weeping acidic solution onto floor flange.",
+    "narrative": "Chemical flange leak detected on line V-101 in processing area."
+  },
+  {
+    "id": "INC-1008",
+    "site": "East Wing",
+    "equipment": "Air Compressor C-2",
+    "hazard_type": "Noise Hazard",
+    "summary": "Air compressor manifold relief valve venting continuously.",
+    "narrative": "Relief valve stuck open on air compressor creating high decibel noise hazard."
+  },
+  {
+    "id": "INC-1009",
+    "site": "Site Bay 2",
+    "equipment": "Coolant Line Loop A",
+    "hazard_type": "Overheating",
+    "summary": "Coolant temperature spike triggering thermal alarm.",
+    "narrative": "Coolant temperature exceeded 200 F due to blocked heat exchanger fins."
+  },
+  {
+    "id": "INC-1010",
+    "site": "North Substation",
+    "equipment": "Transformer Bank T-4",
+    "hazard_type": "Electrical Arc",
+    "summary": "Arc flash reported on 480V distribution panel.",
+    "narrative": "Loose lug on distribution breaker caused brief arc flash during switching."
+  }
+]

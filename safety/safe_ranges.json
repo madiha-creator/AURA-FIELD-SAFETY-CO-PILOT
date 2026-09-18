@@ -1,0 +1,62 @@
+{
+  "proc_coolant_flush": {
+    "coolant_line_pressure": {
+      "min": 4.0,
+      "max": 10.0,
+      "unit": "PSI",
+      "warn_deviation_pct": 10.0,
+      "critical_deviation_pct": 30.0,
+      "aliases": ["coolant pressure", "coolant line pressure", "pressure"],
+      "notes": "Standard operating range for secondary cooling loop."
+    },
+    "coolant_temperature": {
+      "min": 50.0,
+      "max": 180.0,
+      "unit": "F",
+      "warn_deviation_pct": 10.0,
+      "critical_deviation_pct": 25.0,
+      "aliases": ["coolant temp", "coolant temperature", "temperature", "temp"],
+      "notes": "Coolant operational fluid temperature."
+    }
+  },
+  "proc_hydraulic_pump": {
+    "hydraulic_pressure": {
+      "min": 1000.0,
+      "max": 3000.0,
+      "unit": "PSI",
+      "warn_deviation_pct": 10.0,
+      "critical_deviation_pct": 25.0,
+      "aliases": ["hydraulic pressure", "pump pressure", "system pressure"],
+      "notes": "Main hydraulic loop pressure."
+    },
+    "fluid_temperature": {
+      "min": 100.0,
+      "max": 160.0,
+      "unit": "F",
+      "warn_deviation_pct": 10.0,
+      "critical_deviation_pct": 20.0,
+      "aliases": ["hydraulic fluid temp", "fluid temperature", "oil temperature"],
+      "notes": "Hydraulic reservoir temperature."
+    }
+  },
+  "proc_generator_check": {
+    "vibration_frequency": {
+      "min": 10.0,
+      "max": 60.0,
+      "unit": "Hz",
+      "warn_deviation_pct": 15.0,
+      "critical_deviation_pct": 30.0,
+      "aliases": ["vibration", "vibration frequency", "generator vibration"],
+      "notes": "Baseline generator vibration limits."
+    },
+    "oil_pressure": {
+      "min": 25.0,
+      "max": 65.0,
+      "unit": "PSI",
+      "warn_deviation_pct": 10.0,
+      "critical_deviation_pct": 25.0,
+      "aliases": ["oil pressure", "engine oil pressure"],
+      "notes": "Diesel generator lubrication line pressure."
+    }
+  }
+}
