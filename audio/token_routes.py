@@ -5,9 +5,10 @@ GET /v1/token - Authenticated route that mints short-lived session tokens
 for the frontend to connect to AssemblyAI Voice Agent WebSocket (or local mock agent).
 
 Security policy:
-- Must NOT accept arbitrary Bearer tokens.
-- Verifies JWT using JWT_SECRET.
-- Allows a clearly documented dev bypass ONLY when ENV=development.
+- Must NOT accept arbitrary Bearer tokens unless valid JWT or explicitly allowed in dev bypass.
+- Verifies JWT signature & expiration using JWT_SECRET.
+- Extracts sub / user_id onto request.user_id.
+- Never logs raw tokens or API keys in audit logs or responses.
 """
 
 import asyncio
@@ -40,12 +41,14 @@ def require_bearer_auth(f):
             request.user_id = "dev_worker"
             return f(*args, **kwargs)
 
-        # Real JWT Verification
+        # Real JWT Verification with JWT_SECRET
         try:
             jwt_secret = config.JWT_SECRET or "aura-dev-jwt-secret"
             payload = jwt.decode(token, jwt_secret, algorithms=["HS256"])
             request.user_id = payload.get("sub", payload.get("user_id", "unknown_user"))
             return f(*args, **kwargs)
+        except jwt.ExpiredSignatureError:
+            return jsonify({"error": "Unauthorized: JWT token has expired"}), 401
         except jwt.PyJWTError as e:
             return jsonify({"error": f"Unauthorized: Invalid JWT token ({str(e)})"}), 401
 
@@ -79,7 +82,7 @@ def mint_assemblyai_token(api_key: str, expires_in: int = 300) -> dict:
             ) as resp:
                 if resp.status != 200:
                     body = await resp.text()
-                    raise RuntimeError(f"AssemblyAI token endpoint returned {resp.status}: {body}")
+                    raise RuntimeError(f"AssemblyAI token endpoint returned {resp.status}")
                 data = await resp.json()
                 return data
 
@@ -95,7 +98,7 @@ def register_token_routes(app: Flask):
     def issue_token():
         """
         Issue a short-lived session token for the frontend.
-        If ASSEMBLYAI_API_KEY is missing, returns a local mock WS token response.
+        Never logs raw tokens or API keys.
         """
         config = get_config()
         user_id = getattr(request, "user_id", "unknown_user")
@@ -130,7 +133,7 @@ def register_token_routes(app: Flask):
             audit_logger.log_action(
                 user_id=user_id,
                 action="token_issuance_failed",
-                metadata={"error": str(e)},
+                metadata={"error": "AssemblyAI minting error"},
             )
             # Safe local fallback even if external AssemblyAI fails
             mock_token = f"mock_token_{secrets.token_hex(8)}"
@@ -139,5 +142,5 @@ def register_token_routes(app: Flask):
                 "expires_in_seconds": 300,
                 "ws_url": f"ws://127.0.0.1:5000/v1/ws?token={mock_token}",
                 "mock": True,
-                "warning": f"AssemblyAI mint error: {str(e)}"
+                "warning": "AssemblyAI token service unavailable, using local mock"
             })

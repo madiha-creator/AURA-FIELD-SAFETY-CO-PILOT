@@ -1,11 +1,13 @@
 """
-Automated Test Suite for QA-001 through QA-004.
+Automated Test Suite for QA-001 through QA-004 + Authentication Security (AUD-001/002).
 Runs behavioral tests against state manager, tool dispatcher, confirmation gate, and database.
 """
 
 import os
 import time
 import unittest
+import jwt
+from datetime import datetime, timedelta, timezone
 import integrations.database as db_module
 from backend.state_manager import StateManager, SessionMode, ProvenanceSource, ConfirmationStatus, InMemoryStateBackend
 from backend.audit_logger import AuditLogger
@@ -43,7 +45,6 @@ class TestQA001to004(unittest.TestCase):
         self.state_manager.update_report_field(session_id, "equipment", "Valve 2", ProvenanceSource.INFERRED)
 
         # Worker correction action: "no, it was valve 4 not valve 2"
-        # Act through correct_report_field state manager behavior (no faked log_action call in test)
         self.state_manager.correct_report_field(session_id, "equipment", "Valve 4", ProvenanceSource.SAID)
 
         state_after = self.state_manager.get_state(session_id)
@@ -184,10 +185,6 @@ class TestQA001to004(unittest.TestCase):
         expired_state = self.state_manager.get_state(session_id)
         self.assertIsNone(expired_state)
 
-
-if __name__ == "__main__":
-    unittest.main()
-
     def test_qa_005_token_route_and_mock_session(self):
         """Test JWT validation / dev bypass token route and mock session initialization."""
         import backend.app as flask_app
@@ -207,3 +204,44 @@ if __name__ == "__main__":
         data = res_dev.get_json()
         self.assertIn("token", data)
         self.assertIn("ws_url", data)
+
+    def test_qa_006_auth_and_401_paths(self):
+        """Test authentication 401 paths and valid JWT verification for supervisor APIs."""
+        import backend.app as flask_app
+        client = flask_app.app.test_client()
+
+        jwt_secret = "aura-dev-jwt-secret"
+
+        # 1. 401 on missing Authorization header
+        res_reviews_no_auth = client.get("/api/reviews")
+        self.assertEqual(res_reviews_no_auth.status_code, 401)
+        self.assertIn("Missing or invalid Authorization header", res_reviews_no_auth.get_json()["error"])
+
+        # 2. 401 on invalid JWT signature
+        bad_token = jwt.encode({"sub": "attacker"}, "wrong-secret", algorithm="HS256")
+        res_bad_token = client.get("/api/reviews", headers={"Authorization": f"Bearer {bad_token}"})
+        self.assertEqual(res_bad_token.status_code, 401)
+
+        # 3. 401 on expired JWT
+        expired_payload = {
+            "sub": "supervisor_john",
+            "exp": datetime.now(timezone.utc) - timedelta(seconds=10)
+        }
+        expired_token = jwt.encode(expired_payload, jwt_secret, algorithm="HS256")
+        res_expired = client.get("/api/reviews", headers={"Authorization": f"Bearer {expired_token}"})
+        self.assertEqual(res_expired.status_code, 401)
+        self.assertIn("expired", res_expired.get_json()["error"])
+
+        # 4. 200 on valid JWT
+        valid_payload = {
+            "sub": "supervisor_john",
+            "exp": datetime.now(timezone.utc) + timedelta(minutes=5)
+        }
+        valid_token = jwt.encode(valid_payload, jwt_secret, algorithm="HS256")
+        res_valid = client.get("/api/reviews", headers={"Authorization": f"Bearer {valid_token}"})
+        self.assertEqual(res_valid.status_code, 200)
+        self.assertIn("reviews", res_valid.get_json())
+
+
+if __name__ == "__main__":
+    unittest.main()
