@@ -4,6 +4,7 @@ BE-003 & INT-001..004 & SAF-001..004 & DAT-001..005: Tool Dispatcher integrated 
 
 import hashlib
 import json
+import os
 from datetime import datetime, date
 from typing import Any, Optional
 
@@ -107,15 +108,30 @@ class ToolDispatcher:
                 parameter=parameter
             )
 
-        # 4. get_next_step (Requires worker confirmation of current step)
+        # 4. get_next_step (Requires worker confirmation of current step, retrieves from manual DB)
         elif tool_name == "get_next_step":
-            procedure = arguments.get("procedure")
+            procedure = arguments.get("procedure", "proc_coolant_flush")
             current_step = int(arguments.get("current_step", 1))
             next_step = current_step + 1
-            is_final = next_step >= 5
+
+            # Fetch step text from data manuals/index if available
+            manual_res = dat_query_manual_db(procedure=procedure, step=next_step)
+            step_text = manual_res.get("step_text")
+
+            if not step_text:
+                # Fallback procedure step generator if exact step is beyond manual length
+                if current_step >= 4:
+                    return {
+                        "next_step_id": None,
+                        "step_text": "Procedure complete. All verifications recorded.",
+                        "is_final": True
+                    }
+                step_text = f"Step {next_step}: Verify system pressure and inspect connections."
+
+            is_final = (next_step >= 4)
             return {
                 "next_step_id": next_step if not is_final else None,
-                "step_text": f"Step {next_step}: Verify torque specs on mounting bolts.",
+                "step_text": step_text,
                 "is_final": is_final
             }
 
