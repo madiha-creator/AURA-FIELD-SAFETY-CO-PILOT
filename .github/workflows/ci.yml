@@ -20,7 +20,11 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install flask flask-cors aiohttp redis
+          if [ -f requirements.txt ]; then
+            pip install -r requirements.txt
+          else
+            pip install flask flask-cors aiohttp redis
+          fi
 
       - name: Run Backend QA Unit Tests
         run: |
