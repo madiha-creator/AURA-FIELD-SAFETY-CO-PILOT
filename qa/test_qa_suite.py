@@ -187,3 +187,23 @@ class TestQA001to004(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+    def test_qa_005_token_route_and_mock_session(self):
+        """Test JWT validation / dev bypass token route and mock session initialization."""
+        import backend.app as flask_app
+        client = flask_app.app.test_client()
+
+        # Reject request without Bearer token
+        res_no_auth = client.get("/v1/token")
+        self.assertEqual(res_no_auth.status_code, 401)
+
+        # Reject request with invalid JWT in non-dev mode
+        res_invalid = client.get("/v1/token", headers={"Authorization": "Bearer invalid_jwt_token"})
+        self.assertEqual(res_invalid.status_code, 401)
+
+        # Accept dev bypass token
+        res_dev = client.get("/v1/token", headers={"Authorization": "Bearer dev-token-bypass"})
+        self.assertEqual(res_dev.status_code, 200)
+        data = res_dev.get_json()
+        self.assertIn("token", data)
+        self.assertIn("ws_url", data)
