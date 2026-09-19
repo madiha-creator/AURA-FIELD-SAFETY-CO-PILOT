@@ -1,14 +1,22 @@
-# Audio/Voice (AUD-*)
+# Audio Module (AUD-001 through AUD-005)
 
-Client-side audio pipeline: capture, playback, and turn-detection tuning for the AssemblyAI Voice Agent WebSocket.
+Provides browser audio capture, playback buffering, and token-minting routes for AssemblyAI Voice Agent API.
 
-## Tasks
-- **AUD-001** — Set up AssemblyAI API key + secure server-side storage
-- **AUD-002** — Build token-minting backend route (`GET /v1/token`, Bearer auth) *(shared with Backend — see backend/)*
-- **AUD-003** — Implement mic capture: AudioWorklet, Float32 → PCM16 → base64, 24kHz
-- **AUD-004** — Implement audio playback buffer for `reply.audio` (no sleep-scheduling)
-- **AUD-005** — Tune turn detection (`vad_threshold`, `interruption_delay`) for frequent interruptions
+## Local Running Instructions
 
-## Notes
-- Audio in/out is 24kHz PCM16, base64-encoded over the WebSocket (`wss://agents.assemblyai.com/v1/ws`).
-- Safety warnings must be able to interrupt normal `reply.audio` playback — coordinate with `safety/` on how an interrupt signal is surfaced.
+### Environment Variables
+Set the following in `.env`:
+```env
+ASSEMBLYAI_API_KEY=your_assemblyai_api_key  # Optional: if omitted, app uses local mock WS
+JWT_SECRET=aura-dev-jwt-secret
+ENV=development
+```
+
+### Audio Pipeline Specs
+- **Capture**: 24kHz PCM16 base64 streaming from browser AudioWorklet (`frontend/src/audio/pcmWorker.ts`).
+- **Playback**: Playback buffer for `reply.audio` (24kHz PCM16 base64) with immediate queue flush on safety alert (`frontend/src/audio/audioManager.ts`).
+- **Turn Detection Constants**: `vad_threshold=0.5`, `interruption_delay=200ms`, `silence_duration_ms=500ms` (`frontend/src/audio/config.ts`).
+
+### Token Endpoint
+`GET /v1/token`
+Headers: `Authorization: Bearer <JWT_TOKEN>` (or `Authorization: Bearer dev-token-bypass` in `ENV=development`).
