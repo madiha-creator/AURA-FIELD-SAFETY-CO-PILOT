@@ -6,6 +6,7 @@ import ReviewDetail from './pages/ReviewDetail';
 import Patterns from './pages/Patterns';
 import Maintenance from './pages/Maintenance';
 import AuditView from './pages/AuditView';
+import Worker from './pages/Worker';
 
 export default function App() {
   const location = useLocation();
@@ -18,7 +19,7 @@ export default function App() {
   };
 
   return (
-    <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
+    <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', backgroundColor: '#0f172a' }}>
       {!isLoginPage && (
         <header style={{
           backgroundColor: '#1e293b',
@@ -30,9 +31,12 @@ export default function App() {
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '24px' }}>
             <h1 style={{ fontSize: '1.25rem', fontWeight: '700', color: '#38bdf8' }}>
-              Aura Supervisor Co-Pilot
+              Aura Field Safety Co-Pilot
             </h1>
             <nav style={{ display: 'flex', gap: '16px' }}>
+              <Link to="/worker" style={{ color: location.pathname === '/worker' ? '#38bdf8' : '#94a3b8', fontWeight: 600 }}>
+                Worker Voice App
+              </Link>
               <Link to="/inbox" style={{ color: location.pathname.startsWith('/inbox') ? '#38bdf8' : '#94a3b8', fontWeight: 500 }}>
                 Review Inbox
               </Link>
@@ -45,7 +49,7 @@ export default function App() {
             </nav>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-            <span style={{ fontSize: '0.875rem', color: '#cbd5e1' }}>Role: <strong>Supervisor</strong></span>
+            <span style={{ fontSize: '0.875rem', color: '#cbd5e1' }}>Role: <strong>Field Worker / Supervisor</strong></span>
             <button
               onClick={handleLogout}
               style={{
@@ -65,7 +69,8 @@ export default function App() {
       <main style={{ flex: 1, padding: isLoginPage ? 0 : '24px' }}>
         <Routes>
           <Route path="/login" element={<Login />} />
-          <Route path="/" element={<Inbox />} />
+          <Route path="/" element={<Worker />} />
+          <Route path="/worker" element={<Worker />} />
           <Route path="/inbox" element={<Inbox />} />
           <Route path="/inbox/:id" element={<ReviewDetail />} />
           <Route path="/patterns" element={<Patterns />} />
