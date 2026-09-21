@@ -1,14 +1,70 @@
+@import url('https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400;1,700&display=swap');
+
+:root {
+  /* Frontline Industrial Voice Instrument Tokens (design.md) */
+  --bg-app: #EFF3F6;
+  --bg-surface: #FFFFFF;
+  --bg-secondary-surface: #D6E8EA;
+  --bg-surface-dim: #D0DBE7;
+  --bg-surface-bright: #F6FAFF;
+
+  /* Inks & Typography */
+  --ink-950: #111C24;
+  --ink-900: #1B2A33;
+  --ink-700: #40515A;
+  --ink-500: #6F7E85;
+
+  /* Primary Brand & Voice Accents */
+  --aura-teal: #0E7774;
+  --aura-teal-dark: #075B5A;
+  --aura-teal-light: #E0F2F1;
+  --aura-teal-ring: #0F766E;
+
+  /* Semantic State Colors */
+  --warning-amber: #F0A51A;
+  --warning-amber-bg: #FEF3C7;
+  --danger-red: #C9362B;
+  --danger-red-bg: #FEE2E2;
+  --success-green: #237A4B;
+  --success-green-bg: #DCFCE7;
+
+  /* Structural Borders & Lines */
+  --border-subtle: #D0DCE5;
+  --border-focus: #0E7774;
+
+  /* Radii */
+  --radius-card: 16px;
+  --radius-btn: 14px;
+  --radius-pill: 9999px;
+  --radius-sm: 8px;
+
+  /* Touch Targets & Button Heights */
+  --touch-target-min: 56px;
+  --touch-target-preferred: 64px;
+  --btn-primary-height: 68px;
+  --btn-secondary-height: 60px;
+
+  /* Shadows (faint industrial low-blur anchor) */
+  --shadow-card: 0 2px 4px rgba(17, 28, 36, 0.06);
+  --shadow-elevated: 0 4px 12px rgba(17, 28, 36, 0.08);
+
+  /* Fonts */
+  --font-family: 'Atkinson Hyperlegible', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
 * {
   box-sizing: border-box;
   margin: 0;
   padding: 0;
 }
 
-body {
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-  background-color: #0f172a;
-  color: #f8fafc;
+html, body {
+  font-family: var(--font-family);
+  background-color: var(--bg-app);
+  color: var(--ink-950);
   line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 a {
@@ -20,11 +76,100 @@ button {
   cursor: pointer;
   border: none;
   font-family: inherit;
+  background: none;
+  -webkit-tap-highlight-color: transparent;
 }
 
 input, select, textarea {
   font-family: inherit;
 }
+
+/* Accessible touch target helper */
+.touch-target {
+  min-height: var(--touch-target-min);
+  min-width: var(--touch-target-min);
+}
+
+/* ==========================================================================
+   Authoritative AURA Logo Voice Element Animations
+   - Ring 2 rotates smoothly during listening around stable (1000px, 1000px) center
+   - Core identity pulses subtly during speaking
+   - Semantic glows for normal (teal), danger (red), and success (green)
+   ========================================================================== */
+
+/* Middle Ring 2 smooth rotation during listening */
+@keyframes aura-ring2-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Center core gentle pulse during speaking */
+@keyframes aura-core-pulse {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 0.96;
+  }
+  50% {
+    transform: scale(1.045);
+    opacity: 1;
+  }
+}
+
+/* Semantic Glow Pulses */
+@keyframes glow-pulse-normal {
+  0%, 100% {
+    box-shadow: 0 0 24px rgba(14, 119, 116, 0.35), 0 4px 14px rgba(17, 28, 36, 0.12);
+  }
+  50% {
+    box-shadow: 0 0 48px rgba(14, 119, 116, 0.7), 0 6px 20px rgba(17, 28, 36, 0.16);
+  }
+}
+
+@keyframes glow-pulse-danger {
+  0%, 100% {
+    box-shadow: 0 0 28px rgba(201, 54, 43, 0.45), 0 4px 14px rgba(17, 28, 36, 0.12);
+  }
+  50% {
+    box-shadow: 0 0 54px rgba(201, 54, 43, 0.8), 0 6px 20px rgba(17, 28, 36, 0.16);
+  }
+}
+
+@keyframes glow-pulse-success {
+  0%, 100% {
+    box-shadow: 0 0 28px rgba(35, 122, 75, 0.45), 0 4px 14px rgba(17, 28, 36, 0.12);
+  }
+  50% {
+    box-shadow: 0 0 54px rgba(35, 122, 75, 0.8), 0 6px 20px rgba(17, 28, 36, 0.16);
+  }
+}
+
+/* Idle/Ready: Calm, subtle presence */
+@keyframes idle-calm-presence {
+  0%, 100% {
+    box-shadow: 0 0 18px rgba(14, 119, 116, 0.25), 0 4px 12px rgba(17, 28, 36, 0.1);
+  }
+  50% {
+    box-shadow: 0 0 28px rgba(14, 119, 116, 0.4), 0 4px 14px rgba(17, 28, 36, 0.12);
+  }
+}
+
+/* Reduced Motion Override */
+@media (prefers-reduced-motion: reduce) {
+  *, ::before, ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ==========================================================================
+   Preserved Supervisor Styles (Required for /inbox, /patterns, /maintenance)
+   ========================================================================== */
 
 .bg-danger {
   background-color: #7f1d1d !important;

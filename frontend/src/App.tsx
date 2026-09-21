@@ -12,6 +12,7 @@ export default function App() {
   const location = useLocation();
   const navigate = useNavigate();
   const isLoginPage = location.pathname === '/login';
+  const isWorkerRoute = location.pathname === '/' || location.pathname === '/worker';
 
   const handleLogout = () => {
     localStorage.removeItem('supervisor_auth');
@@ -19,8 +20,9 @@ export default function App() {
   };
 
   return (
-    <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', backgroundColor: '#0f172a' }}>
-      {!isLoginPage && (
+    <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', backgroundColor: isWorkerRoute ? '#EFF3F6' : '#0f172a' }}>
+      {/* Supervisor Navigation Header (Rendered on supervisor desktop routes only) */}
+      {!isLoginPage && !isWorkerRoute && (
         <header style={{
           backgroundColor: '#1e293b',
           borderBottom: '1px solid #334155',
@@ -34,7 +36,7 @@ export default function App() {
               Aura Field Safety Co-Pilot
             </h1>
             <nav style={{ display: 'flex', gap: '16px' }}>
-              <Link to="/worker" style={{ color: location.pathname === '/worker' ? '#38bdf8' : '#94a3b8', fontWeight: 600 }}>
+              <Link to="/worker" style={{ color: '#94a3b8', fontWeight: 500 }}>
                 Worker Voice App
               </Link>
               <Link to="/inbox" style={{ color: location.pathname.startsWith('/inbox') ? '#38bdf8' : '#94a3b8', fontWeight: 500 }}>
@@ -49,7 +51,7 @@ export default function App() {
             </nav>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-            <span style={{ fontSize: '0.875rem', color: '#cbd5e1' }}>Role: <strong>Field Worker / Supervisor</strong></span>
+            <span style={{ fontSize: '0.875rem', color: '#cbd5e1' }}>Role: <strong>Supervisor / Reviewer</strong></span>
             <button
               onClick={handleLogout}
               style={{
@@ -66,7 +68,8 @@ export default function App() {
         </header>
       )}
 
-      <main style={{ flex: 1, padding: isLoginPage ? 0 : '24px' }}>
+      {/* Main Content Area */}
+      <main style={{ flex: 1, padding: (isLoginPage || isWorkerRoute) ? 0 : '24px' }}>
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/" element={<Worker />} />
