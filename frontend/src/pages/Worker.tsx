@@ -123,7 +123,7 @@ export default function Worker() {
                 width: '8px',
                 height: '8px',
                 borderRadius: '50%',
-                backgroundColor: '#0E7774',
+                backgroundColor: 'var(--aura-teal)',
                 display: 'inline-block'
               }}
             />
@@ -132,7 +132,7 @@ export default function Worker() {
                 fontSize: '14px',
                 fontWeight: 700,
                 letterSpacing: '0.08em',
-                color: '#40515A',
+                color: 'var(--ink-700)',
                 textTransform: 'uppercase'
               }}
             >
@@ -144,7 +144,7 @@ export default function Worker() {
             style={{
               fontSize: '28px',
               fontWeight: 800,
-              color: '#111C24',
+              color: 'var(--ink-950)',
               letterSpacing: '-0.01em',
               lineHeight: 1.2
             }}
@@ -176,7 +176,7 @@ export default function Worker() {
               fontSize: '20px',
               fontWeight: 800,
               letterSpacing: '0.08em',
-              color: session.variant === 'danger' ? '#C9362B' : '#111C24',
+              color: session.variant === 'danger' ? 'var(--danger-red)' : 'var(--ink-950)',
               textTransform: 'uppercase'
             }}
           >
@@ -188,7 +188,7 @@ export default function Worker() {
               marginTop: '4px',
               fontSize: '15px',
               fontWeight: 500,
-              color: '#6F7E85',
+              color: 'var(--ink-500)',
               maxWidth: '320px',
               lineHeight: 1.4
             }}
@@ -203,9 +203,9 @@ export default function Worker() {
                 marginTop: '12px',
                 padding: '10px 16px',
                 borderRadius: '12px',
-                backgroundColor: session.variant === 'danger' ? '#FEE2E2' : session.variant === 'success' ? '#DCFCE7' : '#FFFFFF',
-                border: session.variant === 'danger' ? '1px solid #FCA5A5' : '1px solid #D0DCE5',
-                color: session.variant === 'danger' ? '#991B1B' : '#111C24',
+                backgroundColor: session.variant === 'danger' ? 'var(--danger-red-bg)' : session.variant === 'success' ? 'var(--success-green-bg)' : 'var(--bg-surface)',
+                border: session.variant === 'danger' ? '1px solid var(--danger-red-border)' : '1px solid var(--border-subtle)',
+                color: session.variant === 'danger' ? 'var(--danger-red-text)' : 'var(--ink-950)',
                 fontSize: '15px',
                 fontWeight: 600,
                 boxShadow: '0 2px 4px rgba(17, 28, 36, 0.04)',
@@ -246,18 +246,18 @@ export default function Worker() {
               display: 'flex',
               alignItems: 'center',
               gap: '8px',
-              backgroundColor: '#FFFFFF',
-              border: '1px solid #D0DCE5',
+              backgroundColor: 'var(--bg-surface)',
+              border: '1px solid var(--border-subtle)',
               padding: '8px 16px',
               borderRadius: '9999px',
               fontSize: '13px',
               fontWeight: 700,
-              color: '#40515A',
+              color: 'var(--ink-700)',
               cursor: 'pointer',
               boxShadow: '0 1px 3px rgba(17, 28, 36, 0.04)'
             }}
           >
-            <MessageSquare size={16} color="#0E7774" />
+            <MessageSquare size={16} color="var(--aura-teal)" />
             View Live Transcript & Keyboard Fallback
           </button>
         </div>

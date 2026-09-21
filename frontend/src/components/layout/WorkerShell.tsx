@@ -31,8 +31,8 @@ export const WorkerShell: React.FC<WorkerShellProps> = ({
         minHeight: '100vh',
         display: 'flex',
         flexDirection: 'column',
-        backgroundColor: '#EFF3F6',
-        color: '#111C24'
+        backgroundColor: 'var(--bg-app)',
+        color: 'var(--ink-950)'
       }}
     >
       {/* Top Header */}
@@ -49,13 +49,13 @@ export const WorkerShell: React.FC<WorkerShellProps> = ({
         <div
           role="alert"
           style={{
-            backgroundColor: '#FEF3C7',
-            color: '#92400E',
+            backgroundColor: 'var(--warning-amber-bg)',
+            color: 'var(--warning-amber-text)',
             padding: '8px 16px',
             fontSize: '13px',
             fontWeight: 700,
             textAlign: 'center',
-            borderBottom: '1px solid #FCD34D'
+            borderBottom: '1px solid var(--warning-amber-border)'
           }}
         >
           {offlineNotice}

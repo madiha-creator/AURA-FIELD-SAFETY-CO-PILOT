@@ -27,8 +27,8 @@ export const BottomNav: React.FC<BottomNavProps> = ({
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-around',
-        backgroundColor: '#FFFFFF',
-        borderTop: '1px solid #D0DCE5',
+        backgroundColor: 'var(--bg-surface)',
+        borderTop: '1px solid var(--border-subtle)',
         padding: '10px 12px 14px 12px',
         position: 'sticky',
         bottom: 0,
@@ -39,7 +39,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({
       {tabs.map((tab) => {
         const Icon = tab.icon;
         const isActive = activeTab === tab.id;
-        const color = isActive ? '#0E7774' : '#6F7E85';
+        const color = isActive ? 'var(--aura-teal)' : 'var(--ink-500)';
 
         return (
           <button
@@ -68,7 +68,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({
                   width: '36px',
                   height: '3px',
                   borderRadius: '2px',
-                  backgroundColor: '#0E7774'
+                  backgroundColor: 'var(--aura-teal)'
                 }}
               />
             )}

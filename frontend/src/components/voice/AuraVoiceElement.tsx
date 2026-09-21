@@ -36,7 +36,7 @@ export const AuraVoiceElement: React.FC<AuraVoiceElementProps> = ({
           : isListening
           ? '0 0 32px rgba(201, 54, 43, 0.5)'
           : '0 0 20px rgba(201, 54, 43, 0.35)',
-        border: '3px solid #C9362B',
+        border: '3px solid var(--danger-red)',
         animation: isSpeaking ? 'glow-pulse-danger 1.4s ease-in-out infinite' : undefined
       };
     }
@@ -48,7 +48,7 @@ export const AuraVoiceElement: React.FC<AuraVoiceElementProps> = ({
           : isListening
           ? '0 0 32px rgba(35, 122, 75, 0.5)'
           : '0 0 20px rgba(35, 122, 75, 0.35)',
-        border: '3px solid #237A4B',
+        border: '3px solid var(--success-green)',
         animation: isSpeaking ? 'glow-pulse-success 1.4s ease-in-out infinite' : undefined
       };
     }
@@ -60,7 +60,7 @@ export const AuraVoiceElement: React.FC<AuraVoiceElementProps> = ({
         : isListening
         ? '0 0 28px rgba(14, 119, 116, 0.5)'
         : '0 0 16px rgba(14, 119, 116, 0.25)',
-      border: isListening ? '3px solid #0E7774' : '3px solid transparent',
+      border: isListening ? '3px solid var(--aura-teal)' : '3px solid transparent',
       animation: isSpeaking
         ? 'glow-pulse-normal 1.6s ease-in-out infinite'
         : !isListening && !isProcessing
@@ -141,7 +141,7 @@ export const AuraVoiceElement: React.FC<AuraVoiceElementProps> = ({
           height: '100%',
           borderRadius: '50%',
           overflow: 'hidden',
-          backgroundColor: '#0E7774',
+          backgroundColor: 'var(--aura-teal)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center'

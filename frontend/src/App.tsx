@@ -20,7 +20,7 @@ export default function App() {
   };
 
   return (
-    <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', backgroundColor: isWorkerRoute ? '#EFF3F6' : '#0f172a' }}>
+    <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', backgroundColor: isWorkerRoute ? 'var(--bg-app)' : '#0f172a' }}>
       {/* Supervisor Navigation Header (Rendered on supervisor desktop routes only) */}
       {!isLoginPage && !isWorkerRoute && (
         <header style={{

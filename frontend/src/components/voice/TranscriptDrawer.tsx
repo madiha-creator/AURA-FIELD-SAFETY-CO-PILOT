@@ -58,7 +58,7 @@ export const TranscriptDrawer: React.FC<TranscriptDrawerProps> = ({
     >
       <div
         style={{
-          backgroundColor: '#FFFFFF',
+          backgroundColor: 'var(--bg-surface)',
           borderTopLeftRadius: '20px',
           borderTopRightRadius: '20px',
           maxHeight: '80vh',
@@ -79,12 +79,12 @@ export const TranscriptDrawer: React.FC<TranscriptDrawerProps> = ({
             justifyContent: 'space-between',
             alignItems: 'center',
             padding: '16px 20px',
-            borderBottom: '1px solid #D0DCE5'
+            borderBottom: '1px solid var(--border-subtle)'
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <MessageSquare size={20} color="#0E7774" />
-            <span style={{ fontSize: '18px', fontWeight: 700, color: '#111C24' }}>
+            <MessageSquare size={20} color="var(--aura-teal)" />
+            <span style={{ fontSize: '18px', fontWeight: 700, color: 'var(--ink-950)' }}>
               Live Transcript & Fallback
             </span>
           </div>
@@ -95,11 +95,11 @@ export const TranscriptDrawer: React.FC<TranscriptDrawerProps> = ({
               width: '36px',
               height: '36px',
               borderRadius: '50%',
-              backgroundColor: '#EFF3F6',
+              backgroundColor: 'var(--bg-app)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              color: '#40515A',
+              color: 'var(--ink-700)',
               cursor: 'pointer'
             }}
           >
@@ -112,11 +112,11 @@ export const TranscriptDrawer: React.FC<TranscriptDrawerProps> = ({
           <div
             style={{
               padding: '10px 20px',
-              backgroundColor: '#D6E8EA',
-              borderBottom: '1px solid #BDC9C7',
+              backgroundColor: 'var(--bg-secondary-surface)',
+              borderBottom: '1px solid var(--outline-variant)',
               fontSize: '14px',
               fontWeight: 600,
-              color: '#075B5A'
+              color: 'var(--aura-teal-dark)'
             }}
             aria-live="polite"
           >
@@ -146,8 +146,8 @@ export const TranscriptDrawer: React.FC<TranscriptDrawerProps> = ({
                 style={{
                   alignSelf: isWorker ? 'flex-end' : isSystem ? 'center' : 'flex-start',
                   maxWidth: isSystem ? '90%' : '80%',
-                  backgroundColor: isWorker ? '#0E7774' : isSystem ? '#F1F5F9' : '#EFF3F6',
-                  color: isWorker ? '#FFFFFF' : isSystem ? '#6F7E85' : '#111C24',
+                  backgroundColor: isWorker ? 'var(--aura-teal)' : isSystem ? 'var(--surface-neutral)' : 'var(--bg-app)',
+                  color: isWorker ? 'var(--bg-surface)' : isSystem ? 'var(--ink-500)' : 'var(--ink-950)',
                   padding: '10px 14px',
                   borderRadius: '12px',
                   fontSize: '15px',
@@ -179,8 +179,8 @@ export const TranscriptDrawer: React.FC<TranscriptDrawerProps> = ({
             display: 'flex',
             gap: '10px',
             padding: '14px 20px',
-            borderTop: '1px solid #D0DCE5',
-            backgroundColor: '#FFFFFF'
+            borderTop: '1px solid var(--border-subtle)',
+            backgroundColor: 'var(--bg-surface)'
           }}
         >
           <input
@@ -193,10 +193,10 @@ export const TranscriptDrawer: React.FC<TranscriptDrawerProps> = ({
               height: '48px',
               padding: '0 14px',
               borderRadius: '10px',
-              border: '1px solid #D0DCE5',
-              backgroundColor: '#EFF3F6',
+              border: '1px solid var(--border-subtle)',
+              backgroundColor: 'var(--bg-app)',
               fontSize: '16px',
-              color: '#111C24',
+              color: 'var(--ink-950)',
               outline: 'none'
             }}
           />
@@ -207,8 +207,8 @@ export const TranscriptDrawer: React.FC<TranscriptDrawerProps> = ({
               width: '48px',
               height: '48px',
               borderRadius: '10px',
-              backgroundColor: '#0E7774',
-              color: '#FFFFFF',
+              backgroundColor: 'var(--aura-teal)',
+              color: 'var(--bg-surface)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',

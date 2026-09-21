@@ -23,14 +23,21 @@
   /* Semantic State Colors */
   --warning-amber: #F0A51A;
   --warning-amber-bg: #FEF3C7;
+  --warning-amber-text: #92400E;
+  --warning-amber-border: #FCD34D;
   --danger-red: #C9362B;
   --danger-red-bg: #FEE2E2;
+  --danger-red-border: #FCA5A5;
+  --danger-red-text: #991B1B;
   --success-green: #237A4B;
   --success-green-bg: #DCFCE7;
 
   /* Structural Borders & Lines */
   --border-subtle: #D0DCE5;
   --border-focus: #0E7774;
+  --outline-variant: #BDC9C7;
+  --surface-container: #E4EFFB;
+  --surface-neutral: #F1F5F9;
 
   /* Radii */
   --radius-card: 16px;

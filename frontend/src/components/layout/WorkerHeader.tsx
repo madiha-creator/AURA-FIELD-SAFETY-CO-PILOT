@@ -1,6 +1,5 @@
 import React from 'react';
 import { User } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
 import { AuraLogoSvg } from '../voice/AuraLogoSvg';
 
 interface WorkerHeaderProps {
@@ -18,14 +17,9 @@ export const WorkerHeader: React.FC<WorkerHeaderProps> = ({
   siteTime = '09:41',
   onProfileClick
 }) => {
-  const navigate = useNavigate();
-
   const handleAvatarClick = () => {
     if (onProfileClick) {
       onProfileClick();
-    } else {
-      // Direct navigation to supervisor inbox or menu if desired
-      navigate('/inbox');
     }
   };
 
@@ -36,8 +30,8 @@ export const WorkerHeader: React.FC<WorkerHeaderProps> = ({
         alignItems: 'center',
         justifyContent: 'space-between',
         padding: '16px 20px',
-        backgroundColor: '#FFFFFF',
-        borderBottom: '1px solid #D0DCE5',
+        backgroundColor: 'var(--bg-surface)',
+        borderBottom: '1px solid var(--border-subtle)',
         position: 'sticky',
         top: 0,
         zIndex: 50
@@ -50,7 +44,7 @@ export const WorkerHeader: React.FC<WorkerHeaderProps> = ({
             width: '38px',
             height: '38px',
             borderRadius: '50%',
-            backgroundColor: '#0E7774',
+            backgroundColor: 'var(--aura-teal)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -66,7 +60,7 @@ export const WorkerHeader: React.FC<WorkerHeaderProps> = ({
             fontSize: '22px',
             fontWeight: 800,
             letterSpacing: '0.04em',
-            color: '#111C24'
+            color: 'var(--ink-950)'
           }}
         >
           AURA
@@ -81,7 +75,7 @@ export const WorkerHeader: React.FC<WorkerHeaderProps> = ({
               width: '8px',
               height: '8px',
               borderRadius: '50%',
-              backgroundColor: isConnected ? '#237A4B' : '#C9362B',
+              backgroundColor: isConnected ? 'var(--success-green)' : 'var(--danger-red)',
               display: 'inline-block'
             }}
           />
@@ -90,7 +84,7 @@ export const WorkerHeader: React.FC<WorkerHeaderProps> = ({
               fontSize: '14px',
               fontWeight: 700,
               letterSpacing: '0.04em',
-              color: '#111C24',
+              color: 'var(--ink-950)',
               textTransform: 'uppercase'
             }}
           >
@@ -101,7 +95,7 @@ export const WorkerHeader: React.FC<WorkerHeaderProps> = ({
           style={{
             fontSize: '14px',
             fontWeight: 600,
-            color: '#40515A',
+            color: 'var(--ink-700)',
             letterSpacing: '0.02em',
             marginTop: '2px'
           }}
@@ -113,22 +107,22 @@ export const WorkerHeader: React.FC<WorkerHeaderProps> = ({
       {/* Right User / Profile Button */}
       <button
         onClick={handleAvatarClick}
-        aria-label="User Profile and Supervisor Navigation"
+        aria-label="Worker Profile"
         style={{
           width: '42px',
           height: '42px',
           borderRadius: '50%',
-          backgroundColor: '#0E7774',
+          backgroundColor: 'var(--aura-teal)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          color: '#FFFFFF',
+          color: 'var(--bg-surface)',
           cursor: 'pointer',
           border: 'none',
           boxShadow: '0 2px 4px rgba(17, 28, 36, 0.1)',
           flexShrink: 0
         }}
-        title="Supervisor Dashboard / Account"
+        title="Worker Profile"
       >
         <User size={22} strokeWidth={2.2} />
       </button>

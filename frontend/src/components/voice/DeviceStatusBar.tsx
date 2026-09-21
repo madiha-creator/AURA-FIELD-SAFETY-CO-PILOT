@@ -12,10 +12,10 @@ export const DeviceStatusBar: React.FC<DeviceStatusBarProps> = ({
   return (
     <div
       style={{
-        backgroundColor: '#FFFFFF',
+        backgroundColor: 'var(--bg-surface)',
         borderRadius: '14px',
         padding: '12px 18px',
-        border: '1px solid #D0DCE5',
+        border: '1px solid var(--border-subtle)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
@@ -29,7 +29,7 @@ export const DeviceStatusBar: React.FC<DeviceStatusBarProps> = ({
             width: '10px',
             height: '10px',
             borderRadius: '50%',
-            backgroundColor: isHeadsetConnected ? '#237A4B' : '#6F7E85',
+            backgroundColor: isHeadsetConnected ? 'var(--success-green)' : 'var(--ink-500)',
             display: 'inline-block'
           }}
         />
@@ -37,7 +37,7 @@ export const DeviceStatusBar: React.FC<DeviceStatusBarProps> = ({
           style={{
             fontSize: '15px',
             fontWeight: 700,
-            color: '#111C24',
+            color: 'var(--ink-950)',
             letterSpacing: '0.02em'
           }}
         >
@@ -49,8 +49,8 @@ export const DeviceStatusBar: React.FC<DeviceStatusBarProps> = ({
       {isPttActive && (
         <span
           style={{
-            backgroundColor: '#D6E8EA',
-            color: '#075B5A',
+            backgroundColor: 'var(--bg-secondary-surface)',
+            color: 'var(--aura-teal-dark)',
             fontSize: '13px',
             fontWeight: 800,
             letterSpacing: '0.08em',

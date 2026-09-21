@@ -13,14 +13,14 @@ export const DraftCard: React.FC<DraftCardProps> = ({
   return (
     <div
       style={{
-        backgroundColor: '#D6E8EA',
+        backgroundColor: 'var(--bg-secondary-surface)',
         borderRadius: '16px',
         padding: '16px 18px',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
         gap: '12px',
-        border: '1px solid #BDC9C7',
+        border: '1px solid var(--outline-variant)',
         boxShadow: '0 2px 4px rgba(17, 28, 36, 0.04)'
       }}
     >
@@ -31,8 +31,8 @@ export const DraftCard: React.FC<DraftCardProps> = ({
             width: '42px',
             height: '42px',
             borderRadius: '50%',
-            backgroundColor: '#FEF3C7',
-            color: '#F0A51A',
+            backgroundColor: 'var(--warning-amber-bg)',
+            color: 'var(--warning-amber)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -49,7 +49,7 @@ export const DraftCard: React.FC<DraftCardProps> = ({
               fontSize: '14px',
               fontWeight: 700,
               letterSpacing: '0.08em',
-              color: '#40515A',
+              color: 'var(--ink-700)',
               textTransform: 'uppercase'
             }}
           >
@@ -59,7 +59,7 @@ export const DraftCard: React.FC<DraftCardProps> = ({
             style={{
               fontSize: '18px',
               fontWeight: 700,
-              color: '#111C24',
+              color: 'var(--ink-950)',
               whiteSpace: 'nowrap',
               overflow: 'hidden',
               textOverflow: 'ellipsis',
@@ -78,8 +78,8 @@ export const DraftCard: React.FC<DraftCardProps> = ({
           display: 'flex',
           alignItems: 'center',
           gap: '8px',
-          backgroundColor: '#111C24',
-          color: '#FFFFFF',
+          backgroundColor: 'var(--ink-950)',
+          color: 'var(--bg-surface)',
           padding: '12px 20px',
           borderRadius: '12px',
           fontWeight: 700,
@@ -91,10 +91,10 @@ export const DraftCard: React.FC<DraftCardProps> = ({
           transition: 'background-color 0.15s'
         }}
         onMouseEnter={(e) => {
-          e.currentTarget.style.backgroundColor = '#1B2A33';
+          e.currentTarget.style.backgroundColor = 'var(--ink-900)';
         }}
         onMouseLeave={(e) => {
-          e.currentTarget.style.backgroundColor = '#111C24';
+          e.currentTarget.style.backgroundColor = 'var(--ink-950)';
         }}
       >
         RESUME <ArrowRight size={18} strokeWidth={2.5} />
