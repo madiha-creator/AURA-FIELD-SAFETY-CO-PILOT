@@ -37,7 +37,12 @@
   --border-focus: #0E7774;
   --outline-variant: #BDC9C7;
   --surface-container: #E4EFFB;
+  --surface-container-low: #EBF5FF;
+  --surface-container-high: #DEEAF5;
+  --surface-container-highest: #D8E4EF;
   --surface-neutral: #F1F5F9;
+  --success-green-border: #86EFAC;
+  --success-green-text: #166534;
 
   /* Radii */
   --radius-card: 16px;
@@ -172,6 +177,20 @@ input, select, textarea {
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }
+}
+
+/* Accessibility Enhancements */
+body.high-contrast-mode {
+  --bg-app: #FFFFFF;
+  --bg-surface: #FFFFFF;
+  --border-subtle: #111C24;
+  --outline-variant: #111C24;
+  --ink-700: #111C24;
+  --ink-500: #1B2A33;
+}
+
+body.large-text-mode {
+  font-size: 115%;
 }
 
 /* ==========================================================================
