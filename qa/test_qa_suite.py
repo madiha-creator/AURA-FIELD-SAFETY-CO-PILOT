@@ -134,6 +134,15 @@ class TestQA001to004(unittest.TestCase):
             local_day="2026-03-30"
         )
 
+        # Safety status must be verified before create_near_miss is allowed
+        status_res = self.dispatcher.execute("check_safety_status", {
+            "session_id": session_id,
+            "mode": "reporting",
+            "worker_id": worker_id,
+            "self_reported_clear": True
+        })
+        self.assertTrue(status_res["safe_to_report"])
+
         # Confirm gate satisfied
         state.confirmation_status = ConfirmationStatus.CONFIRMED
         self.state_manager.update_state(state)
