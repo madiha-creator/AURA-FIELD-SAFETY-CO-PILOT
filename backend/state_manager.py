@@ -88,8 +88,12 @@ class ConversationState:
     confirmation_status: ConfirmationStatus = ConfirmationStatus.NOT_REQUIRED
     confirmation_requested_at: Optional[str] = None
     confirmation_completed_at: Optional[str] = None
+    pending_action: Optional[str] = None
+    pending_payload: Optional[dict] = None
     active_alert: Optional[dict] = None
     assemblyai_session_id: Optional[str] = None
+    last_safety_status: Optional[dict] = None
+    last_threshold_reading: Optional[dict] = None
 
     def to_dict(self) -> dict:
         data = asdict(self)

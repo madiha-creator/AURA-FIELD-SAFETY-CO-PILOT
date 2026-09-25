@@ -6,7 +6,7 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 from integrations.database import get_database
 from backend.audit_logger import AuditLogger
-from backend.state_manager import get_state_manager
+from backend.state_manager import get_state_manager, ConfirmationStatus
 import backend.tool_dispatcher as tool_dispatcher_mod
 from audio.token_routes import register_token_routes, require_bearer_auth
 from backend.config import get_config
@@ -238,6 +238,33 @@ def ws_agent_loop(ws):
             elif msg_type == "user_turn" or msg_type == "text_input":
                 user_text = msg.get("text", "").strip()
 
+                # Pending confirmation reply — handle BEFORE trigger-phrase detection
+                current_state = state_manager.get_state(session_id)
+                if current_state and current_state.confirmation_status == ConfirmationStatus.PENDING:
+                    lowered = user_text.lower()
+                    confirmed = any(w in lowered for w in ["yes", "confirm", "ok", "yep"])
+                    rejected = any(w in lowered for w in ["no", "cancel", "stop"])
+                    pending_action = current_state.pending_action
+                    ok, payload = tool_dispatcher.confirmation_gate.verify_confirmation(
+                        session_id=session_id,
+                        worker_id=current_state.user_id,
+                        confirmed=confirmed,
+                    )
+                    if ok and payload:
+                        result = tool_dispatcher.execute(pending_action, payload)
+                        ws.send(json.dumps({
+                            "type": "tool.result",
+                            "tool": pending_action,
+                            "result": result,
+                        }))
+                    else:
+                        ws.send(json.dumps({
+                            "type": "agent_reply",
+                            "text": "Okay, cancelled." if rejected else "Please say 'yes' to confirm or 'no' to cancel.",
+                            "mode": current_state.mode.value,
+                        }))
+                    continue
+
                 import re
                 numbers = re.findall(r"[-+]?\d*\.\d+|\d+", user_text)
                 if numbers and any(k in user_text.lower() for k in ["psi", "temp", "f", "c", "bar", "pressure", "reading"]):
@@ -262,11 +289,13 @@ def ws_agent_loop(ws):
                 if "report" in user_text.lower() or "near miss" in user_text.lower():
                     state_manager.set_mode(session_id, "reporting")
 
+                    current_state = state_manager.get_state(session_id)
                     status_res = tool_dispatcher.execute("check_safety_status", {
                         "session_id": session_id,
                         "mode": "reporting",
-                        "worker_id": state.user_id,
-                        "self_reported_clear": ("clear" in user_text.lower() or "safe" in user_text.lower())
+                        "worker_id": current_state.user_id if current_state else state.user_id,
+                        "self_reported_clear": ("clear" in user_text.lower() or "safe" in user_text.lower()),
+                        "last_threshold": current_state.last_threshold_reading if current_state else None
                     })
 
                     if not status_res.get("safe_to_report", True):

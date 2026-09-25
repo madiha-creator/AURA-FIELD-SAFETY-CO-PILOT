@@ -134,6 +134,15 @@ class TestQA001to004(unittest.TestCase):
             local_day="2026-03-30"
         )
 
+        # Safety status must be verified before create_near_miss is allowed
+        status_res = self.dispatcher.execute("check_safety_status", {
+            "session_id": session_id,
+            "mode": "reporting",
+            "worker_id": worker_id,
+            "self_reported_clear": True
+        })
+        self.assertTrue(status_res["safe_to_report"])
+
         # Confirm gate satisfied
         state.confirmation_status = ConfirmationStatus.CONFIRMED
         self.state_manager.update_state(state)
@@ -242,6 +251,66 @@ class TestQA001to004(unittest.TestCase):
         self.assertEqual(res_valid.status_code, 200)
         self.assertIn("reviews", res_valid.get_json())
 
+
+    def test_qa_007_confirmation_flow_end_to_end(self):
+            """Verify the confirmation gate stores/replays/clears the pending write end-to-end."""
+            session_id = "test_qa007"
+            worker_id = "worker_01"
+            self.state_manager.create_session(user_id=worker_id, session_id=session_id)
+    
+            # (a) request_confirmation stores pending_action + pending_payload on state
+            payload = {
+                "report": {
+                    "location": "Site Bay 1",
+                    "equipment": "Compressor A",
+                    "hazard_type": "Fluid Leak",
+                    "injury": "None",
+                    "narrative": "Oil leaking near high pressure valve"
+                }
+            }
+            from backend.confirmation_gate import WriteAction
+            result = self.dispatcher.confirmation_gate.request_confirmation(
+                action=WriteAction.CREATE_NEAR_MISS,
+                payload=payload,
+                session_id=session_id,
+                user_id=worker_id,
+            )
+            self.assertTrue(result["confirmation_required"])
+    
+            state = self.state_manager.get_state(session_id)
+            self.assertEqual(state.pending_action, WriteAction.CREATE_NEAR_MISS.value)
+            self.assertEqual(state.pending_payload, payload)
+    
+            # (b) verify_confirmation(confirmed=True) returns (True, payload) and clears both fields
+            ok, returned_payload = self.dispatcher.confirmation_gate.verify_confirmation(
+                session_id=session_id, user_id=worker_id, confirmed=True
+            )
+            self.assertTrue(ok)
+            self.assertEqual(returned_payload, payload)
+    
+            state = self.state_manager.get_state(session_id)
+            self.assertIsNone(state.pending_action)
+            self.assertIsNone(state.pending_payload)
+            self.assertEqual(state.confirmation_status, ConfirmationStatus.CONFIRMED)
+    
+            # (c) verify_confirmation(confirmed=False) returns (False, None) and clears both fields
+            self.dispatcher.confirmation_gate.request_confirmation(
+                action=WriteAction.CREATE_NEAR_MISS,
+                payload=payload,
+                session_id=session_id,
+                user_id=worker_id,
+            )
+            ok, returned_payload = self.dispatcher.confirmation_gate.verify_confirmation(
+                session_id=session_id, user_id=worker_id, confirmed=False
+            )
+            self.assertFalse(ok)
+            self.assertIsNone(returned_payload)
+    
+            state = self.state_manager.get_state(session_id)
+            self.assertIsNone(state.pending_action)
+            self.assertIsNone(state.pending_payload)
+            self.assertEqual(state.confirmation_status, ConfirmationStatus.REJECTED)
+    
 
 if __name__ == "__main__":
     unittest.main()

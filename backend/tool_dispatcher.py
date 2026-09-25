@@ -73,7 +73,7 @@ class ToolDispatcher:
             last_threshold = arguments.get("last_threshold")
             hazard_flags = arguments.get("hazard_flags")
 
-            return saf_check_safety_status(
+            result = saf_check_safety_status(
                 mode=mode,
                 site_id=site_id,
                 equipment_id=equipment_id,
@@ -82,6 +82,13 @@ class ToolDispatcher:
                 hazard_flags=hazard_flags
             )
 
+            if not state and session_id:
+                state = sm.create_session(user_id=worker_id, session_id=session_id)
+            if state:
+                state.last_safety_status = result
+                sm.update_state(state)
+            return result
+
         # 2. check_safety_threshold
         elif tool_name == "check_safety_threshold":
             parameter = arguments.get("parameter", "")
@@ -89,12 +96,19 @@ class ToolDispatcher:
             unit = arguments.get("unit")
             context = arguments.get("context")
 
-            return saf_check_safety_threshold(
+            result = saf_check_safety_threshold(
                 parameter=parameter,
                 value=val,
                 unit=unit,
                 context=context
             )
+
+            if not state and session_id:
+                state = sm.create_session(user_id=worker_id, session_id=session_id)
+            if state:
+                state.last_threshold_reading = result
+                sm.update_state(state)
+            return result
 
         # 3. query_manual_db
         elif tool_name == "query_manual_db":
@@ -155,6 +169,19 @@ class ToolDispatcher:
                 "severity": "medium",
                 "worker_id": worker_id
             })
+            self.audit_logger.log_action(
+                user_id=worker_id,
+                action=AuditAction.MAINTENANCE_LOGGED,
+                session_id=session_id,
+                metadata={
+                    "entry_id": entry_id,
+                    "written": True,
+                    "location": arguments.get("location") or "Site Bay 2",
+                    "equipment": arguments.get("equipment") or arguments.get("component"),
+                    "worker_id": worker_id
+                },
+                provenance=state.report.get_provenance_dict() if state and state.report else None
+            )
             return {"entry_id": entry_id, "written": True}
 
         # 6. get_missing_fields
@@ -179,7 +206,8 @@ class ToolDispatcher:
 
         # 8. create_near_miss (Write tool -> requires check_safety_status & confirmation_gate)
         elif tool_name == "create_near_miss":
-            classification = saf_classify_action("create_near_miss", context=arguments)
+            context = {**arguments, "safety_status": state.last_safety_status if state else None}
+            classification = saf_classify_action("create_near_miss", context=context)
             if not classification.get("allowed", True):
                 return {
                     "error": "Cannot submit near-miss report: Worker safety status is exposed or unverified.",
@@ -206,6 +234,18 @@ class ToolDispatcher:
 
             existing = self.db.get_report_by_idempotency_key(idempotency_key)
             if existing:
+                self.audit_logger.log_action(
+                    user_id=worker_id,
+                    action=AuditAction.REPORT_CREATED,
+                    session_id=session_id,
+                    metadata={
+                        "report_id": existing["id"],
+                        "created": False,
+                        "duplicate": True,
+                        "worker_id": worker_id
+                    },
+                    provenance=state.report.get_provenance_dict() if state and state.report else None
+                )
                 return {"report_id": existing["id"], "created": False, "duplicate": True}
 
             report_id = self.db.create_report({
@@ -219,6 +259,18 @@ class ToolDispatcher:
                 "idempotency_key": idempotency_key,
                 "status": "awaiting_review"
             })
+            self.audit_logger.log_action(
+                user_id=worker_id,
+                action=AuditAction.REPORT_CREATED,
+                session_id=session_id,
+                metadata={
+                    "report_id": report_id,
+                    "created": True,
+                    "duplicate": False,
+                    "worker_id": worker_id
+                },
+                provenance=state.report.get_provenance_dict() if state and state.report else None
+            )
             return {"report_id": report_id, "created": True, "duplicate": False}
 
         # 9. notify_safety_contact (Write tool)
@@ -238,13 +290,25 @@ class ToolDispatcher:
             policy = arguments.get("site_policy", {})
             roles = policy.get("auto_notify_roles", ["safety_officer"])
             channel = policy.get("channel", "email/sms")
-            self.db.create_notification({
+            notification_id = self.db.create_notification({
                 "alert_type": "near_miss",
                 "severity": "high",
                 "location": "Site Main",
                 "recipient_role": roles[0],
                 "sender_id": worker_id
             })
+            self.audit_logger.log_action(
+                user_id=worker_id,
+                action=AuditAction.NOTIFICATION_SENT,
+                session_id=session_id,
+                metadata={
+                    "notification_id": notification_id,
+                    "recipient_role": roles[0],
+                    "channel": channel,
+                    "worker_id": worker_id
+                },
+                provenance=state.report.get_provenance_dict() if state and state.report else None
+            )
             return {"notified": roles, "channel": channel}
 
         # 10. draft_corrective_action (Draft only, pending supervisor)
@@ -262,6 +326,19 @@ class ToolDispatcher:
                 "proposed_action": f"Supervisor Review Required: {sentence}",
                 "status": "pending_supervisor"
             })
+            self.audit_logger.log_action(
+                user_id=worker_id,
+                action=AuditAction.CORRECTIVE_ACTION_DRAFTED,
+                session_id=session_id,
+                metadata={
+                    "draft_id": draft_id,
+                    "report_id": report_id,
+                    "sentence": sentence,
+                    "status": "pending_supervisor",
+                    "worker_id": worker_id
+                },
+                provenance=state.report.get_provenance_dict() if state and state.report else None
+            )
             return {"draft_id": draft_id, "sentence": sentence, "status": "pending_supervisor"}
 
         return {"error": f"Unknown tool {tool_name}"}
