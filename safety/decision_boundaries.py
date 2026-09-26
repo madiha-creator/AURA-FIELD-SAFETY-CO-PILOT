@@ -90,6 +90,21 @@ def classify_action(action: str, context: Optional[Dict[str, Any]] = None) -> Di
     # create_near_miss: confirm, and ONLY if check_safety_status.safe_to_report is true
     if act in {"create_near_miss", "submit_near_miss"}:
         safety_status = context.get("safety_status")
+        # Fail-safe: if safety_status is None AND no raw safety inputs provided,
+        # block instead of falling through to check_safety_status()'s default-safe Rule 5
+        has_raw_inputs = any([
+            context.get("self_reported_clear") is not None,
+            context.get("last_threshold") is not None,
+            context.get("hazard_flags")
+        ])
+        if not safety_status and not has_raw_inputs:
+            return {
+                "boundary": "confirm",
+                "requires_confirmation": True,
+                "requires_supervisor": False,
+                "allowed": False,
+                "reason": "Safety status must be verified via check_safety_status before submitting a near-miss report."
+            }
         if not safety_status:
             safety_status = check_safety_status(
                 mode=context.get("mode", "reporting"),

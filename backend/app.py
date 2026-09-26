@@ -262,11 +262,13 @@ def ws_agent_loop(ws):
                 if "report" in user_text.lower() or "near miss" in user_text.lower():
                     state_manager.set_mode(session_id, "reporting")
 
+                    current_state = state_manager.get_state(session_id)
                     status_res = tool_dispatcher.execute("check_safety_status", {
                         "session_id": session_id,
                         "mode": "reporting",
-                        "worker_id": state.user_id,
-                        "self_reported_clear": ("clear" in user_text.lower() or "safe" in user_text.lower())
+                        "worker_id": current_state.user_id if current_state else state.user_id,
+                        "self_reported_clear": ("clear" in user_text.lower() or "safe" in user_text.lower()),
+                        "last_threshold": current_state.last_threshold_reading if current_state else None
                     })
 
                     if not status_res.get("safe_to_report", True):
