@@ -53,6 +53,8 @@ class ConfirmationGate:
 
         state.confirmation_status = ConfirmationStatus.PENDING
         state.confirmation_requested_at = state.updated_at
+        state.pending_action = action.value
+        state.pending_payload = payload
         self.state_manager.update_state(state)
 
         self.audit_logger.log_action(
@@ -91,6 +93,19 @@ class ConfirmationGate:
             state.confirmation_status = ConfirmationStatus.REJECTED
             state.confirmation_completed_at = state.updated_at
 
+        if confirmed:
+            state.confirmation_status = ConfirmationStatus.CONFIRMED
+            state.confirmation_completed_at = state.updated_at
+            payload = state.pending_payload
+        else:
+            state.confirmation_status = ConfirmationStatus.REJECTED
+            state.confirmation_completed_at = state.updated_at
+            payload = None
+
+        # Clear both pending fields now that confirmation is resolved
+        state.pending_action = None
+        state.pending_payload = None
+
         self.state_manager.update_state(state)
 
         self.audit_logger.log_action(
@@ -103,7 +118,7 @@ class ConfirmationGate:
             confirmation_timestamp=state.confirmation_completed_at,
         )
 
-        return confirmed, getattr(state, "_pending_payload", None)
+        return confirmed, payload
 
     def _generate_confirmation_prompt(self, action: WriteAction, payload: dict) -> str:
         prompts = {
