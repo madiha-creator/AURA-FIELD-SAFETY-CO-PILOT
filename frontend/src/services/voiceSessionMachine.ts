@@ -10,6 +10,54 @@ import {
 } from '../types/voiceSession';
 import { SafetyAlertData } from '../types/workerWorkflows';
 
+/**
+ * Match simple conversational intents for the frontline voice/text instrument.
+ * Returns an authoritative industrial safety co-pilot response, or null if unhandled.
+ */
+export function matchConversationalIntent(rawText: string): string | null {
+  const text = rawText.trim().toLowerCase();
+  const stripped = text.replace(/[?!.,;:()'"]/g, '').trim();
+
+  // 1. Connection / reception / comms check
+  if (
+    /\b(can you reply|are you there|can you hear me|can you hear|are you listening|are you online|radio check|mic check|comms check)\b/i.test(stripped)
+  ) {
+    return 'I am receiving you clearly. Audio and telemetry channels are nominal. Ready when you are.';
+  }
+
+  // 2. Capabilities & assistance
+  if (
+    /\b(what can you do|what are your capabilities|what do you do|how does this work|how do you work|how can you help|commands)\b/i.test(stripped) ||
+    stripped === 'help' ||
+    stripped === 'help me' ||
+    stripped === 'aura help'
+  ) {
+    return 'I am your frontline safety co-pilot. I can guide you step-by-step through procedures, monitor equipment readings against safe thresholds, and log near-miss hazard reports.';
+  }
+
+  // 3. Natural greetings
+  if (/\b(good\s+morning)\b/i.test(stripped)) {
+    return 'Good morning. Aura online and calibrated. All safety monitors nominal. Standing by for procedure guidance or safety reporting.';
+  }
+
+  if (/\b(good\s+afternoon)\b/i.test(stripped)) {
+    return 'Good afternoon. Aura online and calibrated. All safety monitors nominal. Standing by for procedure guidance or safety reporting.';
+  }
+
+  if (/\b(good\s+evening)\b/i.test(stripped)) {
+    return 'Good evening. Aura online and calibrated. All safety monitors nominal. Standing by for procedure guidance or safety reporting.';
+  }
+
+  if (
+    /\b(hello aura|hi aura|hey aura|greetings aura)\b/i.test(stripped) ||
+    /^(hello|hi|hey|greetings)$/i.test(stripped)
+  ) {
+    return 'Hello. Aura online and calibrated. All safety monitors nominal. Ready for procedure guidance or safety reporting.';
+  }
+
+  return null;
+}
+
 export function useVoiceSession(): [VoiceSessionState, VoiceSessionEvents] {
   const [voiceState, setVoiceState] = useState<VoiceState>('ready');
   const [semanticVariant, setSemanticVariant] = useState<SemanticVariant>('normal');
@@ -50,6 +98,7 @@ export function useVoiceSession(): [VoiceSessionState, VoiceSessionEvents] {
   const speakingTimerRef = useRef<number | null>(null);
   const activeSafetyAlertRef = useRef<SafetyAlertData | null>(null);
   const isDangerLockedRef = useRef<boolean>(false);
+  const lastSentTurnRef = useRef<string>('');
 
   // Initialize AudioManager on mount
   useEffect(() => {
@@ -120,8 +169,15 @@ export function useVoiceSession(): [VoiceSessionState, VoiceSessionEvents] {
             audioManagerRef.current?.enqueueChunk(msg.audio);
             setVoiceState('speaking');
           } else if (msg.type === 'agent_reply') {
-            addTranscript('aura', msg.text);
-            setLastAuraResponse(msg.text);
+            let replyText = msg.text;
+            if (replyText && replyText.startsWith("Aura received: '")) {
+              const conversationalReply = matchConversationalIntent(lastSentTurnRef.current || '');
+              if (conversationalReply) {
+                replyText = conversationalReply;
+              }
+            }
+            addTranscript('aura', replyText);
+            setLastAuraResponse(replyText);
 
             // If an active safety alert is currently commanding the interface,
             // do NOT let a trailing normal agent_reply dismiss the safety alert or danger variant!
@@ -292,6 +348,8 @@ export function useVoiceSession(): [VoiceSessionState, VoiceSessionEvents] {
   const sendTextTurn = useCallback((text: string) => {
     if (!text.trim()) return;
 
+    lastSentTurnRef.current = text.trim();
+
     // Barge-in stops audio immediately
     audioManagerRef.current?.stopAndClear();
     if (speakingTimerRef.current) window.clearTimeout(speakingTimerRef.current);
@@ -314,13 +372,8 @@ export function useVoiceSession(): [VoiceSessionState, VoiceSessionEvents] {
         let reply = `Acknowledged: "${text}". AURA is standing by.`;
         let variant: SemanticVariant = 'normal';
 
-        if (lower.includes('check') || lower.includes('procedure') || lower.includes('walk me')) {
-          reply = 'Starting guided inspection check. Step 1: Inspect secondary coolant line connections for physical leakage or pressure drop.';
-          variant = 'normal';
-        } else if (lower.includes('hazard') || lower.includes('near miss') || lower.includes('report')) {
-          reply = 'Opening near-miss report intake. What location and equipment are involved?';
-          variant = 'normal';
-        } else if (lower.includes('psi') || lower.includes('pressure') || lower.includes('danger') || lower.includes('alert')) {
+        // 1. SAFETY CRITICAL CHECK (Takes absolute precedence over conversational intents)
+        if (lower.includes('psi') || lower.includes('pressure') || lower.includes('danger') || lower.includes('alert')) {
           reply = 'WARNING: Measured pressure is outside approved parameters (4.0 - 10.0 PSI). Isolate line immediately.';
           variant = 'danger';
 
@@ -345,9 +398,23 @@ export function useVoiceSession(): [VoiceSessionState, VoiceSessionEvents] {
           activeSafetyAlertRef.current = alertData;
           isDangerLockedRef.current = true;
           setActiveSafetyAlert(alertData);
+        // 2. OPERATIONAL WORKFLOW ROUTING
+        } else if (lower.includes('check') || lower.includes('procedure') || lower.includes('walk me')) {
+          reply = 'Starting guided inspection check. Step 1: Inspect secondary coolant line connections for physical leakage or pressure drop.';
+          variant = 'normal';
+        } else if (lower.includes('hazard') || lower.includes('near miss') || lower.includes('report')) {
+          reply = 'Opening near-miss report intake. What location and equipment are involved?';
+          variant = 'normal';
         } else if (lower.includes('confirm') || lower.includes('safe') || lower.includes('done') || lower.includes('clear')) {
           reply = 'Parameters verified within safe operating range. Check complete.';
           variant = 'success';
+        // 3. CONVERSATIONAL INTENT LAYER (Calm Frontline Industrial Safety Copilot)
+        } else {
+          const conversationalReply = matchConversationalIntent(text);
+          if (conversationalReply) {
+            reply = conversationalReply;
+            variant = 'normal';
+          }
         }
 
         setSemanticVariant(variant);

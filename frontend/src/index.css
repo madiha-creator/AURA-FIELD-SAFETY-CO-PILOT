@@ -204,42 +204,67 @@ body.large-text-mode {
 }
 
 /* ==========================================================================
-   Preserved Supervisor Styles (Required for /inbox, /patterns, /maintenance)
+   AURA Supervisor Operational Cockpit Styles (Daylight System)
    ========================================================================== */
 
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+.card-surface {
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+}
+
 .bg-danger {
-  background-color: #7f1d1d !important;
-  border-left: 4px solid #ef4444 !important;
+  background-color: var(--danger-red-bg) !important;
+  border-left: 4px solid var(--danger-red) !important;
 }
 
 .badge-pattern {
-  background-color: #581c87;
-  color: #e9d5ff;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background-color: var(--warning-amber-bg);
+  color: var(--warning-amber-text);
+  border: 1px solid var(--warning-amber-border);
   padding: 2px 8px;
-  border-radius: 9999px;
-  font-size: 0.75rem;
-  font-weight: 600;
-}
-
-.badge-status {
-  padding: 2px 8px;
-  border-radius: 4px;
-  font-size: 0.75rem;
-  font-weight: 600;
+  border-radius: var(--radius-pill);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
 }
 
-.badge-awaiting {
-  background-color: #78350f;
-  color: #fef3c7;
+.badge-status {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 10px;
+  border-radius: var(--radius-pill);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.badge-awaiting,
+.badge-awaiting_review {
+  background-color: var(--warning-amber-bg);
+  color: var(--warning-amber-text);
+  border: 1px solid var(--warning-amber-border);
 }
 
 .badge-approved {
-  background-color: #064e3b;
-  color: #a7f3d0;
+  background-color: var(--success-green-bg);
+  color: var(--success-green-text);
+  border: 1px solid var(--success-green-border);
 }
 
 .badge-rejected {
-  background-color: #7f1d1d;
-  color: #fecaca;
+  background-color: var(--danger-red-bg);
+  color: var(--danger-red-text);
+  border: 1px solid var(--danger-red-border);
 }
+

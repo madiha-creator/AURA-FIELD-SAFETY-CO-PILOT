@@ -3,6 +3,7 @@ INT-001/002/003/004: Database Interface & Read Models for Supervisor Web Dashboa
 """
 
 import uuid
+import json
 import sqlite3
 from datetime import datetime
 from abc import ABC, abstractmethod
@@ -119,8 +120,10 @@ class SQLiteDatabase(DatabaseInterface):
         return entry_id
 
     def create_report(self, data: dict) -> str:
-        report_id = str(uuid.uuid4())
+        report_id = data.get("id") or str(uuid.uuid4())
         conn = sqlite3.connect(self.db_path)
+        prov = data.get("provenance", {})
+        prov_str = json.dumps(prov) if isinstance(prov, (dict, list)) else str(prov or "{}")
         conn.execute(
             """INSERT INTO reports
                (id, location, equipment, hazard_type, injury, narrative, status,
@@ -134,7 +137,7 @@ class SQLiteDatabase(DatabaseInterface):
                 data.get("injury", ""),
                 data.get("narrative", ""),
                 data.get("status", "awaiting_review"),
-                str(data.get("provenance", {})),
+                prov_str,
                 data.get("idempotency_key", ""),
                 data.get("worker_id", ""),
                 datetime.utcnow().isoformat(),

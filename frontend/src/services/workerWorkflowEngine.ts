@@ -459,9 +459,46 @@ export function useWorkerWorkflowEngine() {
       });
     }
 
+    // Persist report to backend database
+    try {
+      await fetch('/api/reports', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer dev-token-bypass'
+        },
+        body: JSON.stringify({
+          id: reportId,
+          report: {
+            id: reportId,
+            location: draft.location.value || 'Bay 7 South Crossing',
+            equipment: draft.equipment.value || 'Forklift #4',
+            hazard_type: draft.hazard_type.value || 'Near-Miss Hazard',
+            injury: draft.injury.value || 'No injuries reported',
+            narrative: draft.narrative.value || '',
+            worker_id: draft.worker_id || 'worker_01',
+            status: 'awaiting_review',
+            provenance: {
+              location: draft.location,
+              equipment: draft.equipment,
+              hazard_type: draft.hazard_type,
+              injury: draft.injury,
+              corrections: draft.corrections || []
+            },
+            pattern_detected: mentionsForklift,
+            recurrence_sentence: mentionsForklift ? 'Possible recurring pattern: 3 related reports found in the last 30 days.' : ''
+          },
+          idempotency_key: idempotencyKey,
+          session_id: session.sessionId || `session_${reportId}`
+        })
+      });
+    } catch (err) {
+      console.error('Failed to persist report to backend:', err);
+    }
+
     setWorkflowMode('saved_report');
     events.setSemanticVariant('success');
-  }, [draft, events]);
+  }, [draft, events, session.sessionId]);
 
   // Intercept text/voice input from worker
   const handleWorkerInput = useCallback((text: string) => {

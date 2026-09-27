@@ -1,6 +1,17 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { AuraLogoSvg } from '../components/voice/AuraLogoSvg';
+import { ShieldCheck, ArrowRight, Lock, User } from 'lucide-react';
 
+/**
+ * FE-004 Redesigned Supervisor Login Screen
+ *
+ * Route: /login
+ * Visual System: AURA Daylight Industrial Architecture
+ * - Uses AURA design tokens (var(--bg-app), var(--bg-surface), var(--aura-teal), etc.)
+ * - Embedded AuraLogoSvg brand mark
+ * - Preserves supervisor_auth credential write and navigates to /inbox
+ */
 export default function Login() {
   const [username, setUsername] = useState('supervisor@aura.safety');
   const [password, setPassword] = useState('password');
@@ -13,76 +24,244 @@ export default function Login() {
   };
 
   return (
-    <div style={{
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      height: '100vh',
-      backgroundColor: '#0f172a'
-    }}>
-      <div style={{
-        backgroundColor: '#1e293b',
-        padding: '32px',
-        borderRadius: '8px',
-        border: '1px solid #334155',
-        width: '100%',
-        maxWidth: '400px'
-      }}>
-        <h2 style={{ marginBottom: '8px', color: '#38bdf8' }}>Supervisor Login</h2>
-        <p style={{ marginBottom: '24px', color: '#94a3b8', fontSize: '0.875rem' }}>
-          Access near-miss reviews, hazard patterns, and audit logs.
-        </p>
-        <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        minHeight: '100vh',
+        backgroundColor: 'var(--bg-app)',
+        padding: '24px',
+        boxSizing: 'border-box'
+      }}
+    >
+      <div
+        style={{
+          backgroundColor: 'var(--bg-surface)',
+          padding: '40px 36px',
+          borderRadius: 'var(--radius-card)',
+          border: '1px solid var(--border-subtle)',
+          boxShadow: 'var(--shadow-card)',
+          width: '100%',
+          maxWidth: '420px',
+          boxSizing: 'border-box'
+        }}
+      >
+        {/* Brand Cluster */}
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', marginBottom: '28px' }}>
+          <div
+            style={{
+              width: '52px',
+              height: '52px',
+              borderRadius: '50%',
+              backgroundColor: 'var(--aura-teal)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              overflow: 'hidden',
+              marginBottom: '16px',
+              boxShadow: 'var(--shadow-card)'
+            }}
+            aria-hidden="true"
+          >
+            <AuraLogoSvg style={{ width: '100%', height: '100%' }} />
+          </div>
+
+          <span
+            style={{
+              fontSize: '11px',
+              fontWeight: 800,
+              letterSpacing: '0.08em',
+              color: 'var(--aura-teal)',
+              textTransform: 'uppercase',
+              marginBottom: '4px'
+            }}
+          >
+            AURA FIELD SAFETY CO-PILOT
+          </span>
+
+          <h2
+            style={{
+              fontSize: '22px',
+              fontWeight: 800,
+              color: 'var(--ink-950)',
+              letterSpacing: '-0.01em',
+              margin: '0 0 6px 0'
+            }}
+          >
+            Supervisor Cockpit
+          </h2>
+          <p
+            style={{
+              color: 'var(--ink-700)',
+              fontSize: '14px',
+              lineHeight: 1.4,
+              maxWidth: '320px',
+              margin: 0
+            }}
+          >
+            Access frontline near-miss reviews, recurrence patterns, and telemetry audit trails.
+          </p>
+        </div>
+
+        {/* Login Form */}
+        <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
           <div>
-            <label style={{ display: 'block', marginBottom: '4px', fontSize: '0.875rem', color: '#cbd5e1' }}>
-              Username
+            <label
+              htmlFor="supervisor-username"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                marginBottom: '6px',
+                fontSize: '12px',
+                fontWeight: 700,
+                letterSpacing: '0.08em',
+                textTransform: 'uppercase',
+                color: 'var(--ink-700)'
+              }}
+            >
+              <User size={14} style={{ color: 'var(--aura-teal)' }} />
+              <span>Username / Operator ID</span>
             </label>
             <input
+              id="supervisor-username"
               type="text"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
+              required
               style={{
                 width: '100%',
-                padding: '8px 12px',
-                borderRadius: '4px',
-                border: '1px solid #475569',
-                backgroundColor: '#0f172a',
-                color: '#fff'
+                height: '44px',
+                padding: '0 14px',
+                borderRadius: 'var(--radius-sm)',
+                border: '1px solid var(--border-subtle)',
+                backgroundColor: 'var(--bg-surface)',
+                color: 'var(--ink-950)',
+                fontSize: '15px',
+                fontWeight: 500,
+                outline: 'none',
+                boxSizing: 'border-box',
+                transition: 'border-color 0.15s, box-shadow 0.15s'
+              }}
+              onFocus={(e) => {
+                e.target.style.borderColor = 'var(--aura-teal)';
+                e.target.style.boxShadow = '0 0 0 2px rgba(14, 119, 116, 0.2)';
+              }}
+              onBlur={(e) => {
+                e.target.style.borderColor = 'var(--border-subtle)';
+                e.target.style.boxShadow = 'none';
               }}
             />
           </div>
+
           <div>
-            <label style={{ display: 'block', marginBottom: '4px', fontSize: '0.875rem', color: '#cbd5e1' }}>
-              Password
+            <label
+              htmlFor="supervisor-password"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                marginBottom: '6px',
+                fontSize: '12px',
+                fontWeight: 700,
+                letterSpacing: '0.08em',
+                textTransform: 'uppercase',
+                color: 'var(--ink-700)'
+              }}
+            >
+              <Lock size={14} style={{ color: 'var(--aura-teal)' }} />
+              <span>Security Key / Password</span>
             </label>
             <input
+              id="supervisor-password"
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
+              required
               style={{
                 width: '100%',
-                padding: '8px 12px',
-                borderRadius: '4px',
-                border: '1px solid #475569',
-                backgroundColor: '#0f172a',
-                color: '#fff'
+                height: '44px',
+                padding: '0 14px',
+                borderRadius: 'var(--radius-sm)',
+                border: '1px solid var(--border-subtle)',
+                backgroundColor: 'var(--bg-surface)',
+                color: 'var(--ink-950)',
+                fontSize: '15px',
+                fontWeight: 500,
+                outline: 'none',
+                boxSizing: 'border-box',
+                transition: 'border-color 0.15s, box-shadow 0.15s'
+              }}
+              onFocus={(e) => {
+                e.target.style.borderColor = 'var(--aura-teal)';
+                e.target.style.boxShadow = '0 0 0 2px rgba(14, 119, 116, 0.2)';
+              }}
+              onBlur={(e) => {
+                e.target.style.borderColor = 'var(--border-subtle)';
+                e.target.style.boxShadow = 'none';
               }}
             />
           </div>
+
           <button
             type="submit"
+            aria-label="Sign In to Supervisor Cockpit"
             style={{
-              backgroundColor: '#0284c7',
-              color: '#fff',
-              padding: '10px',
-              borderRadius: '4px',
-              fontWeight: 600,
-              marginTop: '8px'
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '8px',
+              minHeight: '48px',
+              height: '48px',
+              backgroundColor: 'var(--aura-teal)',
+              color: '#FFFFFF',
+              border: 'none',
+              borderRadius: 'var(--radius-sm)',
+              fontSize: '14px',
+              fontWeight: 700,
+              letterSpacing: '0.04em',
+              cursor: 'pointer',
+              marginTop: '8px',
+              boxShadow: 'var(--shadow-card)',
+              transition: 'background-color 0.15s, transform 0.1s, box-shadow 0.15s',
+              outline: 'none'
+            }}
+            onFocus={(e) => {
+              e.currentTarget.style.boxShadow = '0 0 0 3px rgba(14, 119, 116, 0.35)';
+            }}
+            onBlur={(e) => {
+              e.currentTarget.style.boxShadow = 'var(--shadow-card)';
+            }}
+            onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--aura-teal-dark)')}
+            onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'var(--aura-teal)')}
+            onMouseDown={(e) => {
+              e.currentTarget.style.backgroundColor = 'var(--aura-teal-dark)';
+              e.currentTarget.style.transform = 'scale(0.99)';
+            }}
+            onMouseUp={(e) => {
+              e.currentTarget.style.backgroundColor = 'var(--aura-teal)';
+              e.currentTarget.style.transform = 'none';
             }}
           >
-            Sign In as Supervisor
+            <ShieldCheck size={18} />
+            <span>Sign In to Cockpit</span>
+            <ArrowRight size={16} />
           </button>
         </form>
+
+        <div
+          style={{
+            marginTop: '24px',
+            paddingTop: '16px',
+            borderTop: '1px solid var(--border-subtle)',
+            textAlign: 'center',
+            fontSize: '12px',
+            color: 'var(--ink-500)'
+          }}
+        >
+          Station verified · Sector 4 Shift Console · Encrypted Session
+        </div>
       </div>
     </div>
   );
