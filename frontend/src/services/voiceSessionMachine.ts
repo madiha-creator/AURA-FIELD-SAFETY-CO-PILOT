@@ -135,13 +135,22 @@ export function useVoiceSession(): [VoiceSessionState, VoiceSessionEvents] {
             if (msg.safe_to_report === false) {
               setSemanticVariant('danger');
             }
-            setVoiceState('speaking');
-            if (speakingTimerRef.current) window.clearTimeout(speakingTimerRef.current);
-            speakingTimerRef.current = window.setTimeout(() => {
-              if (activeSafetyAlertRef.current === null && !isDangerLockedRef.current) {
-                setVoiceState('ready');
-              }
-            }, 4500);
+            // FE-003: Only transition to speaking if audio payload exists; text-only replies transition to ready
+            if (msg.audio) {
+              setLastAuraAudioChunk(msg.audio);
+              audioManagerRef.current?.enqueueChunk(msg.audio);
+              setVoiceState('speaking');
+              if (speakingTimerRef.current) window.clearTimeout(speakingTimerRef.current);
+              speakingTimerRef.current = window.setTimeout(() => {
+                if (activeSafetyAlertRef.current === null && !isDangerLockedRef.current) {
+                  setVoiceState('ready');
+                }
+              }, 4500);
+            } else {
+              setLastAuraAudioChunk(undefined);
+              if (speakingTimerRef.current) window.clearTimeout(speakingTimerRef.current);
+              setVoiceState('ready');
+            }
           } else if (msg.type === 'safety_alert') {
             audioManagerRef.current?.stopAndClear();
             if (speakingTimerRef.current) window.clearTimeout(speakingTimerRef.current);
@@ -349,20 +358,12 @@ export function useVoiceSession(): [VoiceSessionState, VoiceSessionEvents] {
         if (variant === 'danger') {
           // Safety alert state: initial announcement displays warning, then settles into locked interrupted danger state.
           // Danger variant, alert data, and warning caption remain active until the worker explicitly acknowledges/dismisses it!
-          setVoiceState('speaking');
-          speakingTimerRef.current = window.setTimeout(() => {
-            setVoiceState('interrupted');
-            // Stays locked in danger state!
-          }, 3500);
+          if (speakingTimerRef.current) window.clearTimeout(speakingTimerRef.current);
+          setVoiceState('interrupted');
         } else {
-          setVoiceState('speaking');
-          speakingTimerRef.current = window.setTimeout(() => {
-            if (activeSafetyAlertRef.current === null && !isDangerLockedRef.current) {
-              setVoiceState('ready');
-              setCurrentCaption('Ready when you are.');
-              setSemanticVariant('normal');
-            }
-          }, 4000);
+          // FE-003: Text turn fallback generates no audio; transition to ready directly
+          if (speakingTimerRef.current) window.clearTimeout(speakingTimerRef.current);
+          setVoiceState('ready');
         }
       }, 700);
     }
