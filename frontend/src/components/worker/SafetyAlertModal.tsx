@@ -1,15 +1,17 @@
 import React from 'react';
 import { SafetyAlertData } from '../../types/workerWorkflows';
-import { AlertOctagon, PhoneCall, ShieldAlert, Check } from 'lucide-react';
+import { AlertOctagon, PhoneCall, ShieldAlert, Check, X } from 'lucide-react';
 
 interface SafetyAlertModalProps {
   alert: SafetyAlertData;
   onAcknowledge: () => void;
+  onClose?: () => void;
 }
 
 export const SafetyAlertModal: React.FC<SafetyAlertModalProps> = ({
   alert,
-  onAcknowledge
+  onAcknowledge,
+  onClose
 }) => {
   return (
     <div
@@ -72,11 +74,11 @@ export const SafetyAlertModal: React.FC<SafetyAlertModalProps> = ({
           <div>
             <div
               style={{
-                fontSize: '12px',
+                fontSize: '14px',
                 fontWeight: 800,
-                letterSpacing: '0.1em',
+                letterSpacing: '0.08em',
                 textTransform: 'uppercase',
-                opacity: 0.9
+                opacity: 0.95
               }}
             >
               CRITICAL SENTINEL TRIP
@@ -93,6 +95,29 @@ export const SafetyAlertModal: React.FC<SafetyAlertModalProps> = ({
               {alert.title}
             </h2>
           </div>
+          {onClose && (
+            <button
+              onClick={onClose}
+              aria-label="Dismiss modal to view workflow"
+              title="Dismiss modal to view workflow"
+              style={{
+                marginLeft: 'auto',
+                width: '44px',
+                height: '44px',
+                borderRadius: '50%',
+                backgroundColor: 'rgba(255, 255, 255, 0.15)',
+                border: 'none',
+                color: '#FFFFFF',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0
+              }}
+            >
+              <X size={24} />
+            </button>
+          )}
         </div>
 
         {/* Modal Body */}
@@ -101,24 +126,27 @@ export const SafetyAlertModal: React.FC<SafetyAlertModalProps> = ({
           <div
             style={{
               backgroundColor: 'var(--danger-red-bg)',
-              border: '1px solid var(--danger-red-border)',
+              border: '1.5px solid var(--danger-red-border)',
               borderRadius: '12px',
               padding: '16px'
             }}
           >
-            <div style={{ fontSize: '13px', fontWeight: 800, color: 'var(--danger-red-text)', textTransform: 'uppercase' }}>
+            <div style={{ fontSize: '14px', fontWeight: 800, color: 'var(--danger-red-text)', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
               PARAMETER DEVIATION DETECTED
             </div>
-            <div style={{ fontSize: '26px', fontWeight: 800, color: 'var(--danger-red)', marginTop: '4px' }}>
-              {alert.measuredValue} {alert.unit}
+            <div style={{ fontSize: '28px', fontWeight: 800, color: 'var(--danger-red)', marginTop: '4px', letterSpacing: '-0.01em' }}>
+              {alert.parameter.toUpperCase()}: {alert.measuredValue} {alert.unit}
             </div>
-            <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--danger-red-text)', marginTop: '4px' }}>
+            <div style={{ fontSize: '15px', fontWeight: 700, color: 'var(--danger-red-text)', marginTop: '6px' }}>
               Allowable range: {alert.expectedRange.min} – {alert.expectedRange.max} {alert.unit} ({alert.deviationPct > 0 ? `+${alert.deviationPct}%` : `${alert.deviationPct}%`} deviation)
             </div>
           </div>
 
           {/* Reason explanation */}
-          <p style={{ fontSize: '16px', color: 'var(--ink-950)', lineHeight: 1.45, fontWeight: 600 }}>
+          <p
+            id="safety-alert-desc"
+            style={{ fontSize: '16px', color: 'var(--ink-950)', lineHeight: 1.45, fontWeight: 600 }}
+          >
             {alert.message}
           </p>
 
@@ -127,15 +155,15 @@ export const SafetyAlertModal: React.FC<SafetyAlertModalProps> = ({
             style={{
               backgroundColor: 'var(--surface-container-low)',
               borderRadius: '12px',
-              padding: '14px 16px',
+              padding: '16px 18px',
               border: '1px solid var(--border-subtle)'
             }}
           >
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--aura-teal-dark)', fontSize: '13px', fontWeight: 800, marginBottom: '6px' }}>
-              <ShieldAlert size={18} />
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--aura-teal-dark)', fontSize: '14px', fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: '8px' }}>
+              <ShieldAlert size={20} />
               PRESCRIBED IMMEDIATE SAFE ACTION
             </div>
-            <div style={{ fontSize: '14px', color: 'var(--ink-950)', lineHeight: 1.5, whiteSpace: 'pre-line', fontWeight: 600 }}>
+            <div style={{ fontSize: '15px', color: 'var(--ink-950)', lineHeight: 1.5, whiteSpace: 'pre-line', fontWeight: 600 }}>
               {alert.prescribedAction}
             </div>
           </div>

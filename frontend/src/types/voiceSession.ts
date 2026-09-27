@@ -26,6 +26,8 @@ export interface TranscriptEntry {
   isPartial?: boolean;
 }
 
+import { SafetyAlertData } from './workerWorkflows';
+
 export interface VoiceSessionState {
   state: VoiceState;
   variant: SemanticVariant;
@@ -46,6 +48,8 @@ export interface VoiceSessionState {
   lastAuraAudioChunk?: string;
   errorDetail?: string;
   transcripts: TranscriptEntry[];
+  sessionId: string;
+  activeSafetyAlert: SafetyAlertData | null;
 }
 
 export interface VoiceSessionEvents {
@@ -68,4 +72,6 @@ export interface VoiceSessionEvents {
   resetSession: () => void;
   sendTextTurn: (text: string) => void;
   setSemanticVariant: (variant: SemanticVariant) => void;
+  dismissSafetyAlert: () => void;
+  reconnect: () => void;
 }

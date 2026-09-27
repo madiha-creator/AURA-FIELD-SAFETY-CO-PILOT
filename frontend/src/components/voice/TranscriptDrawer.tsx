@@ -8,6 +8,7 @@ interface TranscriptDrawerProps {
   transcripts: TranscriptEntry[];
   onSendText: (text: string) => void;
   activeCaption?: string;
+  partialUserText?: string;
 }
 
 export const TranscriptDrawer: React.FC<TranscriptDrawerProps> = ({
@@ -15,7 +16,8 @@ export const TranscriptDrawer: React.FC<TranscriptDrawerProps> = ({
   onClose,
   transcripts,
   onSendText,
-  activeCaption
+  activeCaption,
+  partialUserText
 }) => {
   const [inputText, setInputText] = useState('');
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -24,7 +26,7 @@ export const TranscriptDrawer: React.FC<TranscriptDrawerProps> = ({
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  }, [transcripts, isOpen]);
+  }, [transcripts, partialUserText, isOpen]);
 
   if (!isOpen) return null;
 
@@ -62,7 +64,7 @@ export const TranscriptDrawer: React.FC<TranscriptDrawerProps> = ({
           borderTopLeftRadius: '20px',
           borderTopRightRadius: '20px',
           maxHeight: '80vh',
-          height: '520px',
+          height: '540px',
           display: 'flex',
           flexDirection: 'column',
           boxShadow: '0 -4px 24px rgba(17, 28, 36, 0.2)',
@@ -83,8 +85,8 @@ export const TranscriptDrawer: React.FC<TranscriptDrawerProps> = ({
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <MessageSquare size={20} color="var(--aura-teal)" />
-            <span style={{ fontSize: '18px', fontWeight: 700, color: 'var(--ink-950)' }}>
+            <MessageSquare size={22} color="var(--aura-teal)" />
+            <span style={{ fontSize: '18px', fontWeight: 800, color: 'var(--ink-950)' }}>
               Live Transcript & Fallback
             </span>
           </div>
@@ -92,8 +94,8 @@ export const TranscriptDrawer: React.FC<TranscriptDrawerProps> = ({
             onClick={onClose}
             aria-label="Close Transcript"
             style={{
-              width: '36px',
-              height: '36px',
+              width: '44px',
+              height: '44px',
               borderRadius: '50%',
               backgroundColor: 'var(--bg-app)',
               display: 'flex',
@@ -103,7 +105,7 @@ export const TranscriptDrawer: React.FC<TranscriptDrawerProps> = ({
               cursor: 'pointer'
             }}
           >
-            <X size={20} />
+            <X size={22} />
           </button>
         </div>
 
@@ -115,7 +117,8 @@ export const TranscriptDrawer: React.FC<TranscriptDrawerProps> = ({
               backgroundColor: 'var(--bg-secondary-surface)',
               borderBottom: '1px solid var(--outline-variant)',
               fontSize: '14px',
-              fontWeight: 600,
+              fontWeight: 700,
+              letterSpacing: '0.04em',
               color: 'var(--aura-teal-dark)'
             }}
             aria-live="polite"
@@ -139,40 +142,107 @@ export const TranscriptDrawer: React.FC<TranscriptDrawerProps> = ({
           {transcripts.map((t) => {
             const isWorker = t.sender === 'worker';
             const isSystem = t.sender === 'system';
+            const isCriticalSystem = isSystem && (t.text.includes('CRITICAL') || t.text.includes('SAFETY') || t.text.includes('ALERT'));
 
             return (
               <div
                 key={t.id}
                 style={{
                   alignSelf: isWorker ? 'flex-end' : isSystem ? 'center' : 'flex-start',
-                  maxWidth: isSystem ? '90%' : '80%',
-                  backgroundColor: isWorker ? 'var(--aura-teal)' : isSystem ? 'var(--surface-neutral)' : 'var(--bg-app)',
-                  color: isWorker ? 'var(--bg-surface)' : isSystem ? 'var(--ink-500)' : 'var(--ink-950)',
-                  padding: '10px 14px',
-                  borderRadius: '12px',
+                  maxWidth: isSystem ? '92%' : '82%',
+                  backgroundColor: isWorker
+                    ? 'var(--aura-teal)'
+                    : isCriticalSystem
+                    ? 'var(--danger-red-bg)'
+                    : isSystem
+                    ? 'var(--surface-neutral)'
+                    : 'var(--bg-app)',
+                  color: isWorker
+                    ? 'var(--bg-surface)'
+                    : isCriticalSystem
+                    ? 'var(--danger-red-text)'
+                    : isSystem
+                    ? 'var(--ink-700)'
+                    : 'var(--ink-950)',
+                  padding: '12px 16px',
+                  borderRadius: '14px',
                   fontSize: '15px',
-                  lineHeight: '1.4',
-                  border: isSystem ? '1px dashed #CBD5E1' : 'none'
+                  lineHeight: '1.45',
+                  border: isCriticalSystem
+                    ? '2px solid var(--danger-red-border)'
+                    : isSystem
+                    ? '1px dashed var(--border-subtle)'
+                    : '1px solid var(--border-subtle)',
+                  boxShadow: isCriticalSystem ? '0 2px 6px rgba(201, 54, 43, 0.15)' : 'none'
                 }}
               >
                 <div
                   style={{
-                    fontSize: '11px',
+                    fontSize: '14px',
                     fontWeight: 700,
+                    letterSpacing: '0.08em',
                     textTransform: 'uppercase',
                     marginBottom: '4px',
-                    opacity: 0.8
+                    opacity: isWorker ? 0.9 : 0.8
                   }}
                 >
-                  {t.sender} · {t.timestamp}
+                  {isWorker ? 'YOU' : isCriticalSystem ? 'SENTINEL ALERT' : isSystem ? 'SYSTEM' : 'AURA'} · {t.timestamp}
                 </div>
-                <div style={{ fontWeight: isWorker ? 600 : 500 }}>{t.text}</div>
+                <div style={{ fontWeight: isWorker || isCriticalSystem ? 700 : 500 }}>
+                  {t.text}
+                </div>
               </div>
             );
           })}
+
+          {/* In-flight streaming partial user turn indicator (rendered only when active speech provides partial text) */}
+          {partialUserText && (
+            <div
+              style={{
+                alignSelf: 'flex-end',
+                maxWidth: '85%',
+                backgroundColor: 'var(--aura-teal)',
+                color: 'var(--bg-surface)',
+                padding: '12px 16px',
+                borderRadius: '14px',
+                fontSize: '15px',
+                lineHeight: '1.45',
+                border: '1.5px dashed rgba(255, 255, 255, 0.6)',
+                opacity: 0.95
+              }}
+            >
+              <div
+                style={{
+                  fontSize: '14px',
+                  fontWeight: 700,
+                  letterSpacing: '0.08em',
+                  textTransform: 'uppercase',
+                  marginBottom: '4px',
+                  opacity: 0.9,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px'
+                }}
+              >
+                <span>YOU · SPEAKING</span>
+                <span
+                  style={{
+                    width: '6px',
+                    height: '6px',
+                    borderRadius: '50%',
+                    backgroundColor: '#FFFFFF',
+                    display: 'inline-block'
+                  }}
+                />
+              </div>
+              <div style={{ fontWeight: 600, fontStyle: 'italic' }}>
+                {partialUserText} ...
+              </div>
+            </div>
+          )}
         </div>
 
-        {/* Keyboard Input Fallback Bar (FE-003) */}
+        {/* Keyboard Input Fallback Bar */}
         <form
           onSubmit={handleSubmit}
           style={{
@@ -190,10 +260,11 @@ export const TranscriptDrawer: React.FC<TranscriptDrawerProps> = ({
             placeholder="Type a voice command or report field..."
             style={{
               flex: 1,
-              height: '48px',
-              padding: '0 14px',
-              borderRadius: '10px',
-              border: '1px solid var(--border-subtle)',
+              height: '56px',
+              minHeight: 'var(--touch-target-min)',
+              padding: '0 16px',
+              borderRadius: 'var(--radius-btn)',
+              border: '1.5px solid var(--border-subtle)',
               backgroundColor: 'var(--bg-app)',
               fontSize: '16px',
               color: 'var(--ink-950)',
@@ -204,19 +275,21 @@ export const TranscriptDrawer: React.FC<TranscriptDrawerProps> = ({
             type="submit"
             aria-label="Send Text Turn"
             style={{
-              width: '48px',
-              height: '48px',
-              borderRadius: '10px',
+              width: '56px',
+              height: '56px',
+              minHeight: 'var(--touch-target-min)',
+              borderRadius: 'var(--radius-btn)',
               backgroundColor: 'var(--aura-teal)',
               color: 'var(--bg-surface)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               cursor: 'pointer',
-              flexShrink: 0
+              flexShrink: 0,
+              boxShadow: '0 2px 4px rgba(14, 119, 116, 0.25)'
             }}
           >
-            <Send size={20} />
+            <Send size={22} />
           </button>
         </form>
       </div>

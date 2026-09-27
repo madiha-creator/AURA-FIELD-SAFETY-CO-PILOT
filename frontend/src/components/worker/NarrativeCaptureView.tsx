@@ -38,7 +38,7 @@ export const NarrativeCaptureView: React.FC<NarrativeCaptureViewProps> = ({
         <div>
           <span
             style={{
-              fontSize: '13px',
+              fontSize: '14px',
               fontWeight: 800,
               letterSpacing: '0.08em',
               color: 'var(--aura-teal)',
@@ -136,7 +136,7 @@ export const NarrativeCaptureView: React.FC<NarrativeCaptureViewProps> = ({
           <Mic size={16} color="var(--aura-teal)" />
           <span
             style={{
-              fontSize: '12px',
+              fontSize: '14px',
               fontWeight: 800,
               letterSpacing: '0.08em',
               color: 'var(--ink-700)',
@@ -161,7 +161,7 @@ export const NarrativeCaptureView: React.FC<NarrativeCaptureViewProps> = ({
 
         <div
           style={{
-            fontSize: '12px',
+            fontSize: '14px',
             color: 'var(--ink-500)',
             marginTop: '10px',
             textAlign: 'right'
