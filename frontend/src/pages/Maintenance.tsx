@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { Wrench, Clock, MapPin, User, AlertCircle, CheckCircle2 } from 'lucide-react';
 
 interface MaintenanceItem {
   id: string;
@@ -22,48 +23,238 @@ export default function Maintenance() {
       .finally(() => setLoading(false));
   }, []);
 
+  const getSeverityBadge = (severity: string) => {
+    const s = severity.toLowerCase();
+    let bg = 'var(--surface-container)';
+    let text = 'var(--ink-700)';
+    let border = 'var(--border-subtle)';
+
+    if (s.includes('crit') || s.includes('high')) {
+      bg = 'var(--danger-red-bg)';
+      text = 'var(--danger-red-text)';
+      border = 'var(--danger-red-border)';
+    } else if (s.includes('med')) {
+      bg = 'var(--warning-amber-bg)';
+      text = 'var(--warning-amber-text)';
+      border = 'var(--warning-amber-border)';
+    } else if (s.includes('low')) {
+      bg = 'var(--success-green-bg)';
+      text = 'var(--success-green-text)';
+      border = 'var(--success-green-border)';
+    }
+
+    return (
+      <span
+        style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          padding: '2px 8px',
+          borderRadius: 'var(--radius-pill)',
+          backgroundColor: bg,
+          color: text,
+          border: `1px solid ${border}`,
+          fontSize: '11px',
+          fontWeight: 700,
+          letterSpacing: '0.06em',
+          textTransform: 'uppercase'
+        }}
+      >
+        {severity}
+      </span>
+    );
+  };
+
   return (
     <div>
-      <h2 style={{ fontSize: '1.5rem', fontWeight: 600, marginBottom: '8px' }}>Maintenance Logs (Read-Only)</h2>
-      <p style={{ color: '#94a3b8', fontSize: '0.875rem', marginBottom: '24px' }}>
-        Recent log_maintenance_entry records filed hands-free during field ops.
-      </p>
+      {/* Page Header */}
+      <div style={{ marginBottom: '24px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+          <span
+            style={{
+              fontSize: '11px',
+              fontWeight: 800,
+              letterSpacing: '0.08em',
+              color: 'var(--aura-teal)',
+              textTransform: 'uppercase'
+            }}
+          >
+            FIELD TELEMETRY LOGS
+          </span>
+          <span
+            style={{
+              backgroundColor: 'var(--surface-container)',
+              color: 'var(--ink-700)',
+              border: '1px solid var(--border-subtle)',
+              padding: '2px 8px',
+              borderRadius: 'var(--radius-pill)',
+              fontSize: '11px',
+              fontWeight: 700
+            }}
+          >
+            {entries.length} ENTRIES
+          </span>
+        </div>
+        <h2
+          style={{
+            fontSize: '26px',
+            fontWeight: 800,
+            color: 'var(--ink-950)',
+            letterSpacing: '-0.01em',
+            lineHeight: 1.2
+          }}
+        >
+          Maintenance Logs (Read-Only)
+        </h2>
+        <p style={{ color: 'var(--ink-700)', fontSize: '14px', marginTop: '4px' }}>
+          Hands-free equipment work orders and field observations recorded via log_maintenance_entry.
+        </p>
+      </div>
 
       {loading ? (
-        <div style={{ color: '#94a3b8' }}>Loading maintenance logs...</div>
+        <div
+          style={{
+            padding: '48px',
+            textAlign: 'center',
+            backgroundColor: 'var(--bg-surface)',
+            borderRadius: 'var(--radius-card)',
+            border: '1px solid var(--border-subtle)',
+            color: 'var(--ink-700)',
+            fontSize: '14px',
+            fontWeight: 600
+          }}
+        >
+          Loading maintenance records from field log database...
+        </div>
       ) : entries.length === 0 ? (
-        <div style={{ padding: '32px', backgroundColor: '#1e293b', borderRadius: '8px', color: '#94a3b8' }}>
-          No maintenance entries recorded.
+        <div
+          style={{
+            padding: '56px 24px',
+            textAlign: 'center',
+            backgroundColor: 'var(--bg-surface)',
+            borderRadius: 'var(--radius-card)',
+            border: '1px solid var(--border-subtle)',
+            boxShadow: 'var(--shadow-card)'
+          }}
+        >
+          <div
+            style={{
+              width: '48px',
+              height: '48px',
+              borderRadius: '50%',
+              backgroundColor: 'var(--surface-container)',
+              color: 'var(--ink-500)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              margin: '0 auto 16px auto'
+            }}
+          >
+            <CheckCircle2 size={24} />
+          </div>
+          <h3 style={{ fontSize: '18px', fontWeight: 700, color: 'var(--ink-950)', marginBottom: '6px' }}>
+            No Maintenance Entries Recorded
+          </h3>
+          <p style={{ color: 'var(--ink-700)', fontSize: '14px', maxWidth: '420px', margin: '0 auto' }}>
+            No work logs or equipment faults have been filed by frontline field technicians during current operational shift.
+          </p>
         </div>
       ) : (
-        <table style={{ width: '100%', borderCollapse: 'collapse', backgroundColor: '#1e293b', borderRadius: '8px', overflow: 'hidden' }}>
-          <thead>
-            <tr style={{ backgroundColor: '#0f172a', textAlign: 'left', color: '#94a3b8', fontSize: '0.85rem' }}>
-              <th style={{ padding: '12px 16px' }}>Time</th>
-              <th style={{ padding: '12px 16px' }}>Equipment</th>
-              <th style={{ padding: '12px 16px' }}>Location</th>
-              <th style={{ padding: '12px 16px' }}>Issue Description</th>
-              <th style={{ padding: '12px 16px' }}>Severity</th>
-              <th style={{ padding: '12px 16px' }}>Technician</th>
-            </tr>
-          </thead>
-          <tbody>
-            {entries.map((item) => (
-              <tr key={item.id} style={{ borderBottom: '1px solid #334155', fontSize: '0.9rem' }}>
-                <td style={{ padding: '12px 16px', color: '#94a3b8' }}>{new Date(item.created_at).toLocaleString()}</td>
-                <td style={{ padding: '12px 16px', fontWeight: 600 }}>{item.equipment}</td>
-                <td style={{ padding: '12px 16px', color: '#cbd5e1' }}>{item.location}</td>
-                <td style={{ padding: '12px 16px', color: '#e2e8f0' }}>{item.issue_description}</td>
-                <td style={{ padding: '12px 16px' }}>
-                  <span style={{ padding: '2px 8px', borderRadius: '4px', fontSize: '0.75rem', backgroundColor: '#334155', color: '#38bdf8' }}>
-                    {item.severity}
-                  </span>
-                </td>
-                <td style={{ padding: '12px 16px', color: '#94a3b8' }}>{item.worker_id}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        /* Instrument-grade Data Table Container (DESIGN.md Section 5) */
+        <div
+          style={{
+            backgroundColor: 'var(--bg-surface)',
+            borderRadius: 'var(--radius-card)',
+            border: '1px solid var(--border-subtle)',
+            boxShadow: 'var(--shadow-card)',
+            overflow: 'hidden'
+          }}
+        >
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+              <thead>
+                <tr
+                  style={{
+                    backgroundColor: 'var(--bg-app)',
+                    borderBottom: '1px solid var(--border-subtle)'
+                  }}
+                >
+                  <th style={{ padding: '14px 20px', fontSize: '11px', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--ink-500)' }}>
+                    Timestamp
+                  </th>
+                  <th style={{ padding: '14px 20px', fontSize: '11px', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--ink-500)' }}>
+                    Equipment Asset
+                  </th>
+                  <th style={{ padding: '14px 20px', fontSize: '11px', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--ink-500)' }}>
+                    Location
+                  </th>
+                  <th style={{ padding: '14px 20px', fontSize: '11px', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--ink-500)' }}>
+                    Issue Observation
+                  </th>
+                  <th style={{ padding: '14px 20px', fontSize: '11px', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--ink-500)' }}>
+                    Severity
+                  </th>
+                  <th style={{ padding: '14px 20px', fontSize: '11px', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--ink-500)' }}>
+                    Technician
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {entries.map((item) => (
+                  <tr
+                    key={item.id}
+                    style={{
+                      borderBottom: '1px solid var(--border-subtle)',
+                      transition: 'background-color 0.1s'
+                    }}
+                    onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--surface-container-low)')}
+                    onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+                  >
+                    <td
+                      style={{
+                        padding: '16px 20px',
+                        fontSize: '13px',
+                        color: 'var(--ink-500)',
+                        fontVariantNumeric: 'tabular-nums',
+                        whiteSpace: 'nowrap'
+                      }}
+                    >
+                      {new Date(item.created_at).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}
+                    </td>
+                    <td style={{ padding: '16px 20px', fontSize: '14px', fontWeight: 700, color: 'var(--ink-950)' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <Wrench size={14} style={{ color: 'var(--aura-teal)' }} />
+                        <span>{item.equipment}</span>
+                      </div>
+                    </td>
+                    <td style={{ padding: '16px 20px', fontSize: '13px', color: 'var(--ink-700)' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        <MapPin size={13} style={{ color: 'var(--ink-500)' }} />
+                        <span>{item.location}</span>
+                      </div>
+                    </td>
+                    <td style={{ padding: '16px 20px', fontSize: '14px', color: 'var(--ink-950)', maxWidth: '380px' }}>
+                      {item.issue_description}
+                    </td>
+                    <td style={{ padding: '16px 20px' }}>
+                      {getSeverityBadge(item.severity)}
+                    </td>
+                    <td
+                      style={{
+                        padding: '16px 20px',
+                        fontSize: '13px',
+                        fontWeight: 600,
+                        color: 'var(--ink-700)',
+                        fontFamily: 'monospace'
+                      }}
+                    >
+                      {item.worker_id}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
       )}
     </div>
   );

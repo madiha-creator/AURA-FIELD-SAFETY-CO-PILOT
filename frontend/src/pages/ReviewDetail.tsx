@@ -1,5 +1,25 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { ProvenanceBadge } from '../components/supervisor/ProvenanceBadge';
+import { StatusBadge } from '../components/supervisor/StatusBadge';
+import { HoldToConfirmButton } from '../components/supervisor/HoldToConfirmButton';
+import {
+  ArrowLeft,
+  FileText,
+  AlertTriangle,
+  History,
+  CheckCircle2,
+  XCircle,
+  Edit3,
+  Quote,
+  ShieldAlert,
+  User,
+  Clock,
+  Sparkles,
+  Layers,
+  Wrench,
+  MapPin
+} from 'lucide-react';
 
 interface ReviewDetailData {
   report: {
@@ -35,6 +55,7 @@ export default function ReviewDetail() {
   const [rejectReason, setRejectReason] = useState('');
   const [showRejectModal, setShowRejectModal] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
+  const [editReason, setEditReason] = useState('Supervisor corrections to field values');
 
   // Edit fields
   const [location, setLocation] = useState('');
@@ -80,13 +101,14 @@ export default function ReviewDetail() {
   };
 
   const handleEditSave = async () => {
+    const finalReason = editReason.trim() || 'Supervisor corrections to field values';
     try {
       const res = await fetch(`/api/reviews/${id}/edit`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           changes: { location, equipment, hazard_type: hazardType },
-          reason: 'Supervisor corrections to field values'
+          reason: finalReason
         })
       });
       if (res.ok) {
@@ -99,12 +121,12 @@ export default function ReviewDetail() {
   };
 
   const handleReject = async () => {
-    if (!rejectReason) return;
+    if (!rejectReason.trim()) return;
     try {
       const res = await fetch(`/api/reviews/${id}/reject`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ reason: rejectReason, supervisor_id: 'sup_01' })
+        body: JSON.stringify({ reason: rejectReason.trim(), supervisor_id: 'sup_01' })
       });
       if (res.ok) {
         setShowRejectModal(false);
@@ -116,188 +138,925 @@ export default function ReviewDetail() {
   };
 
   if (loading || !data) {
-    return <div style={{ color: '#94a3b8' }}>Loading report details...</div>;
+    return (
+      <div
+        style={{
+          padding: '64px',
+          textAlign: 'center',
+          backgroundColor: 'var(--bg-surface)',
+          borderRadius: 'var(--radius-card)',
+          border: '1px solid var(--border-subtle)',
+          color: 'var(--ink-700)',
+          fontSize: '15px',
+          fontWeight: 600
+        }}
+      >
+        Loading review dossier from field database...
+      </div>
+    );
   }
 
   const { report, corrective_action, similar_reports, pattern_signal } = data;
   const prov = typeof report.provenance === 'string' ? JSON.parse(report.provenance || '{}') : report.provenance || {};
+  const isAwaitingReview = report.status === 'awaiting_review';
 
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-        <button
-          onClick={() => navigate('/inbox')}
-          style={{ backgroundColor: '#334155', color: '#fff', padding: '6px 14px', borderRadius: '4px' }}
-        >
-          ← Back to Inbox
-        </button>
-        <div style={{ display: 'flex', gap: '12px' }}>
+      {/* Top Action Bar */}
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          gap: '16px',
+          marginBottom: '24px',
+          flexWrap: 'wrap'
+        }}
+      >
+        {/* Left: Back button & Report Title */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+          <button
+            onClick={() => navigate('/inbox')}
+            title="Return to review roster"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              height: '40px',
+              padding: '0 14px',
+              borderRadius: 'var(--radius-sm)',
+              backgroundColor: 'var(--bg-surface)',
+              border: '1px solid var(--border-subtle)',
+              color: 'var(--ink-950)',
+              fontSize: '13px',
+              fontWeight: 700,
+              cursor: 'pointer',
+              boxShadow: 'var(--shadow-card)',
+              transition: 'background-color 0.15s'
+            }}
+          >
+            <ArrowLeft size={16} />
+            <span>Roster</span>
+          </button>
+
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <h2
+                style={{
+                  fontSize: '22px',
+                  fontWeight: 800,
+                  color: 'var(--ink-950)',
+                  lineHeight: 1.2
+                }}
+              >
+                Dossier #{report.id}
+              </h2>
+              <StatusBadge status={report.status} />
+            </div>
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                color: 'var(--ink-500)',
+                fontSize: '12px',
+                fontWeight: 600,
+                marginTop: '2px'
+              }}
+            >
+              <span>FILED BY: {report.worker_id}</span>
+              <span>•</span>
+              <span style={{ fontVariantNumeric: 'tabular-nums' }}>
+                {new Date(report.created_at).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* Right: Actions Cluster */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+          {/* Full Session Audit Trail Link */}
           <button
             onClick={() => navigate(`/audit/session_${report.id}`)}
-            style={{ backgroundColor: '#475569', color: '#fff', padding: '8px 16px', borderRadius: '4px' }}
+            title="View complete session interaction timeline and gate verification log"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              height: '44px',
+              padding: '0 16px',
+              borderRadius: 'var(--radius-sm)',
+              backgroundColor: 'var(--bg-surface)',
+              border: '1px solid var(--border-subtle)',
+              color: 'var(--ink-700)',
+              fontSize: '13px',
+              fontWeight: 700,
+              cursor: 'pointer',
+              boxShadow: 'var(--shadow-card)'
+            }}
           >
-            View Full Session Audit
+            <History size={16} style={{ color: 'var(--aura-teal)' }} />
+            <span>Session Audit</span>
           </button>
-          {report.status === 'awaiting_review' && (
+
+          {/* Conditional Workflow Actions: Only if awaiting_review */}
+          {isAwaitingReview && (
             <>
+              {/* Edit Report Toggle */}
               <button
                 onClick={() => setIsEditing(!isEditing)}
-                style={{ backgroundColor: '#d97706', color: '#fff', padding: '8px 16px', borderRadius: '4px', fontWeight: 600 }}
+                title="Edit report fields with audit logging"
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  height: '44px',
+                  padding: '0 16px',
+                  borderRadius: 'var(--radius-sm)',
+                  backgroundColor: isEditing ? 'var(--warning-amber-bg)' : 'var(--bg-surface)',
+                  color: isEditing ? 'var(--warning-amber-text)' : 'var(--ink-950)',
+                  border: `1px solid ${isEditing ? 'var(--warning-amber-border)' : 'var(--border-subtle)'}`,
+                  fontSize: '13px',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  boxShadow: 'var(--shadow-card)'
+                }}
               >
-                {isEditing ? 'Cancel Edit' : 'Edit Report'}
+                <Edit3 size={15} />
+                <span>{isEditing ? 'Cancel Edit' : 'Edit Report'}</span>
               </button>
+
+              {/* Reject Action */}
               <button
                 onClick={() => setShowRejectModal(true)}
-                style={{ backgroundColor: '#dc2626', color: '#fff', padding: '8px 16px', borderRadius: '4px', fontWeight: 600 }}
+                title="Reject near-miss report with mandatory reason"
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  height: '44px',
+                  padding: '0 16px',
+                  borderRadius: 'var(--radius-sm)',
+                  backgroundColor: 'var(--danger-red-bg)',
+                  color: 'var(--danger-red-text)',
+                  border: '1px solid var(--danger-red-border)',
+                  fontSize: '13px',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  boxShadow: 'var(--shadow-card)'
+                }}
               >
-                Reject
+                <XCircle size={16} />
+                <span>Reject</span>
               </button>
-              <button
-                onClick={handleApprove}
-                style={{ backgroundColor: '#16a34a', color: '#fff', padding: '8px 16px', borderRadius: '4px', fontWeight: 600 }}
-              >
-                Approve & Notify
-              </button>
+
+              {/* Hold-to-Confirm Approve & Notify (DESIGN.md 1000ms Hold) */}
+              <HoldToConfirmButton
+                onConfirm={handleApprove}
+                label="Approve & Notify"
+                confirmingLabel="Confirming Approval..."
+              />
             </>
           )}
         </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '20px' }}>
-        {/* Left Column: Structured Report Fields */}
-        <div style={{ backgroundColor: '#1e293b', padding: '20px', borderRadius: '8px', border: '1px solid #334155' }}>
-          <h3 style={{ borderBottom: '1px solid #334155', paddingBottom: '8px', marginBottom: '16px', color: '#38bdf8' }}>
-            Structured Report Fields
-          </h3>
-          {isEditing ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              <div>
-                <label style={{ fontSize: '0.8rem', color: '#94a3b8' }}>Location</label>
-                <input
-                  type="text"
-                  value={location}
-                  onChange={e => setLocation(e.target.value)}
-                  style={{ width: '100%', padding: '6px', borderRadius: '4px', backgroundColor: '#0f172a', color: '#fff', border: '1px solid #475569' }}
-                />
+      {/* Primary Supervisor Cockpit Grid (Desktop 12-col: 7 cols Stage / 5 cols Intelligence Rail) */}
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))',
+          gap: '24px',
+          alignItems: 'start'
+        }}
+      >
+        {/* Left Stage (Structured Dossier & Verbatim Narrative) */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+          {/* Card 1: Structured Report Dossier */}
+          <div
+            style={{
+              backgroundColor: 'var(--bg-surface)',
+              padding: '24px',
+              borderRadius: 'var(--radius-card)',
+              border: '1px solid var(--border-subtle)',
+              boxShadow: 'var(--shadow-card)'
+            }}
+          >
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                paddingBottom: '12px',
+                marginBottom: '18px',
+                borderBottom: '1px solid var(--border-subtle)'
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <FileText size={18} style={{ color: 'var(--aura-teal)' }} />
+                <h3
+                  style={{
+                    fontSize: '13px',
+                    fontWeight: 800,
+                    letterSpacing: '0.08em',
+                    textTransform: 'uppercase',
+                    color: 'var(--aura-teal)'
+                  }}
+                >
+                  Structured Report Dossier
+                </h3>
               </div>
-              <div>
-                <label style={{ fontSize: '0.8rem', color: '#94a3b8' }}>Equipment</label>
-                <input
-                  type="text"
-                  value={equipment}
-                  onChange={e => setEquipment(e.target.value)}
-                  style={{ width: '100%', padding: '6px', borderRadius: '4px', backgroundColor: '#0f172a', color: '#fff', border: '1px solid #475569' }}
-                />
+              <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--ink-500)' }}>
+                TELEMETRY MAPPING
+              </span>
+            </div>
+
+            {isEditing ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                <div>
+                  <label
+                    style={{
+                      display: 'block',
+                      fontSize: '11px',
+                      fontWeight: 700,
+                      letterSpacing: '0.08em',
+                      textTransform: 'uppercase',
+                      color: 'var(--ink-700)',
+                      marginBottom: '6px'
+                    }}
+                  >
+                    Location / Bay
+                  </label>
+                  <input
+                    type="text"
+                    value={location}
+                    onChange={e => setLocation(e.target.value)}
+                    style={{
+                      width: '100%',
+                      height: '42px',
+                      padding: '0 12px',
+                      borderRadius: 'var(--radius-sm)',
+                      backgroundColor: 'var(--bg-app)',
+                      color: 'var(--ink-950)',
+                      border: '1px solid var(--border-subtle)',
+                      fontSize: '14px',
+                      fontWeight: 600,
+                      boxSizing: 'border-box'
+                    }}
+                  />
+                </div>
+
+                <div>
+                  <label
+                    style={{
+                      display: 'block',
+                      fontSize: '11px',
+                      fontWeight: 700,
+                      letterSpacing: '0.08em',
+                      textTransform: 'uppercase',
+                      color: 'var(--ink-700)',
+                      marginBottom: '6px'
+                    }}
+                  >
+                    Equipment / Asset Tag
+                  </label>
+                  <input
+                    type="text"
+                    value={equipment}
+                    onChange={e => setEquipment(e.target.value)}
+                    style={{
+                      width: '100%',
+                      height: '42px',
+                      padding: '0 12px',
+                      borderRadius: 'var(--radius-sm)',
+                      backgroundColor: 'var(--bg-app)',
+                      color: 'var(--ink-950)',
+                      border: '1px solid var(--border-subtle)',
+                      fontSize: '14px',
+                      fontWeight: 600,
+                      boxSizing: 'border-box'
+                    }}
+                  />
+                </div>
+
+                <div>
+                  <label
+                    style={{
+                      display: 'block',
+                      fontSize: '11px',
+                      fontWeight: 700,
+                      letterSpacing: '0.08em',
+                      textTransform: 'uppercase',
+                      color: 'var(--ink-700)',
+                      marginBottom: '6px'
+                    }}
+                  >
+                    Hazard Classification
+                  </label>
+                  <input
+                    type="text"
+                    value={hazardType}
+                    onChange={e => setHazardType(e.target.value)}
+                    style={{
+                      width: '100%',
+                      height: '42px',
+                      padding: '0 12px',
+                      borderRadius: 'var(--radius-sm)',
+                      backgroundColor: 'var(--bg-app)',
+                      color: 'var(--ink-950)',
+                      border: '1px solid var(--border-subtle)',
+                      fontSize: '14px',
+                      fontWeight: 600,
+                      boxSizing: 'border-box'
+                    }}
+                  />
+                </div>
+
+                <div>
+                  <label
+                    style={{
+                      display: 'block',
+                      fontSize: '11px',
+                      fontWeight: 700,
+                      letterSpacing: '0.08em',
+                      textTransform: 'uppercase',
+                      color: 'var(--ink-700)',
+                      marginBottom: '6px'
+                    }}
+                  >
+                    Mandatory Audit Justification
+                  </label>
+                  <input
+                    type="text"
+                    value={editReason}
+                    onChange={e => setEditReason(e.target.value)}
+                    placeholder="Provide reason for field modification..."
+                    style={{
+                      width: '100%',
+                      height: '42px',
+                      padding: '0 12px',
+                      borderRadius: 'var(--radius-sm)',
+                      backgroundColor: 'var(--bg-app)',
+                      color: 'var(--ink-950)',
+                      border: '1px solid var(--warning-amber-border)',
+                      fontSize: '14px',
+                      fontWeight: 500,
+                      boxSizing: 'border-box'
+                    }}
+                  />
+                </div>
+
+                <div style={{ display: 'flex', gap: '10px', marginTop: '6px' }}>
+                  <button
+                    onClick={handleEditSave}
+                    disabled={!editReason.trim()}
+                    style={{
+                      height: '42px',
+                      padding: '0 20px',
+                      borderRadius: 'var(--radius-sm)',
+                      backgroundColor: 'var(--aura-teal)',
+                      color: '#FFFFFF',
+                      fontSize: '13px',
+                      fontWeight: 700,
+                      cursor: editReason.trim() ? 'pointer' : 'not-allowed',
+                      opacity: editReason.trim() ? 1 : 0.6
+                    }}
+                  >
+                    Save Changes & Write Audit Event
+                  </button>
+                  <button
+                    onClick={() => setIsEditing(false)}
+                    style={{
+                      height: '42px',
+                      padding: '0 16px',
+                      borderRadius: 'var(--radius-sm)',
+                      backgroundColor: 'var(--bg-app)',
+                      color: 'var(--ink-700)',
+                      border: '1px solid var(--border-subtle)',
+                      fontSize: '13px',
+                      fontWeight: 600
+                    }}
+                  >
+                    Cancel
+                  </button>
+                </div>
               </div>
-              <div>
-                <label style={{ fontSize: '0.8rem', color: '#94a3b8' }}>Hazard Type</label>
-                <input
-                  type="text"
-                  value={hazardType}
-                  onChange={e => setHazardType(e.target.value)}
-                  style={{ width: '100%', padding: '6px', borderRadius: '4px', backgroundColor: '#0f172a', color: '#fff', border: '1px solid #475569' }}
-                />
-              </div>
-              <button
-                onClick={handleEditSave}
-                style={{ backgroundColor: '#0284c7', color: '#fff', padding: '8px', borderRadius: '4px', marginTop: '8px' }}
+            ) : (
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+                  gap: '16px'
+                }}
               >
-                Save Changes (Writes Audit Event)
-              </button>
+                {/* Location */}
+                <div
+                  style={{
+                    backgroundColor: 'var(--bg-app)',
+                    padding: '14px 16px',
+                    borderRadius: 'var(--radius-sm)',
+                    border: '1px solid var(--border-subtle)'
+                  }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                    <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--ink-500)', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+                      Location
+                    </span>
+                    <ProvenanceBadge source={prov.location?.source || 'worker_said'} />
+                  </div>
+                  <strong style={{ fontSize: '16px', color: 'var(--ink-950)' }}>{report.location}</strong>
+                </div>
+
+                {/* Equipment */}
+                <div
+                  style={{
+                    backgroundColor: 'var(--bg-app)',
+                    padding: '14px 16px',
+                    borderRadius: 'var(--radius-sm)',
+                    border: '1px solid var(--border-subtle)'
+                  }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                    <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--ink-500)', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+                      Equipment Asset
+                    </span>
+                    <ProvenanceBadge source={prov.equipment?.source || 'worker_said'} />
+                  </div>
+                  <strong style={{ fontSize: '16px', color: 'var(--ink-950)' }}>{report.equipment}</strong>
+                </div>
+
+                {/* Hazard Type */}
+                <div
+                  style={{
+                    backgroundColor: 'var(--bg-app)',
+                    padding: '14px 16px',
+                    borderRadius: 'var(--radius-sm)',
+                    border: '1px solid var(--border-subtle)'
+                  }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                    <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--ink-500)', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+                      Hazard Classification
+                    </span>
+                    <ProvenanceBadge source={prov.hazard_type?.source || 'worker_said'} />
+                  </div>
+                  <strong style={{ fontSize: '16px', color: 'var(--ink-950)' }}>{report.hazard_type}</strong>
+                </div>
+
+                {/* Injury Status */}
+                <div
+                  style={{
+                    backgroundColor: 'var(--bg-app)',
+                    padding: '14px 16px',
+                    borderRadius: 'var(--radius-sm)',
+                    border: '1px solid var(--border-subtle)'
+                  }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                    <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--ink-500)', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+                      Injury Status
+                    </span>
+                    <ProvenanceBadge source="verified" />
+                  </div>
+                  <strong style={{ fontSize: '16px', color: 'var(--ink-950)' }}>{report.injury}</strong>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Card 2: Worker Narrative & Agent Read-Back */}
+          <div
+            style={{
+              backgroundColor: 'var(--bg-surface)',
+              padding: '24px',
+              borderRadius: 'var(--radius-card)',
+              border: '1px solid var(--border-subtle)',
+              boxShadow: 'var(--shadow-card)'
+            }}
+          >
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                paddingBottom: '12px',
+                marginBottom: '18px',
+                borderBottom: '1px solid var(--border-subtle)'
+              }}
+            >
+              <Quote size={18} style={{ color: 'var(--aura-teal)' }} />
+              <h3
+                style={{
+                  fontSize: '13px',
+                  fontWeight: 800,
+                  letterSpacing: '0.08em',
+                  textTransform: 'uppercase',
+                  color: 'var(--aura-teal)'
+                }}
+              >
+                Frontline Audio Transcript & Read-Back
+              </h3>
             </div>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-              <div>
-                <span style={{ fontSize: '0.8rem', color: '#94a3b8', display: 'block' }}>Location</span>
-                <strong style={{ fontSize: '1rem' }}>{report.location}</strong>
-                <span style={{ marginLeft: '8px', fontSize: '0.75rem', padding: '2px 6px', borderRadius: '4px', backgroundColor: '#334155', color: '#38bdf8' }}>
-                  {prov.location?.source === 'inferred' ? 'AI INFERRED' : 'YOU SAID'}
-                </span>
-              </div>
-              <div>
-                <span style={{ fontSize: '0.8rem', color: '#94a3b8', display: 'block' }}>Equipment</span>
-                <strong style={{ fontSize: '1rem' }}>{report.equipment}</strong>
-                <span style={{ marginLeft: '8px', fontSize: '0.75rem', padding: '2px 6px', borderRadius: '4px', backgroundColor: '#334155', color: '#38bdf8' }}>
-                  {prov.equipment?.source === 'inferred' ? 'AI INFERRED' : 'YOU SAID'}
-                </span>
-              </div>
-              <div>
-                <span style={{ fontSize: '0.8rem', color: '#94a3b8', display: 'block' }}>Hazard Type</span>
-                <strong style={{ fontSize: '1rem' }}>{report.hazard_type}</strong>
-                <span style={{ marginLeft: '8px', fontSize: '0.75rem', padding: '2px 6px', borderRadius: '4px', backgroundColor: '#334155', color: '#38bdf8' }}>
-                  {prov.hazard_type?.source === 'inferred' ? 'AI INFERRED' : 'YOU SAID'}
-                </span>
-              </div>
-              <div>
-                <span style={{ fontSize: '0.8rem', color: '#94a3b8', display: 'block' }}>Injury Status</span>
-                <strong style={{ fontSize: '1rem' }}>{report.injury}</strong>
-              </div>
+
+            {/* Verbatim Worker Quote */}
+            <div
+              style={{
+                backgroundColor: 'var(--surface-container)',
+                border: '1px solid var(--border-subtle)',
+                borderRadius: 'var(--radius-sm)',
+                padding: '16px',
+                marginBottom: '16px'
+              }}
+            >
+              <span
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  fontSize: '11px',
+                  fontWeight: 800,
+                  letterSpacing: '0.08em',
+                  textTransform: 'uppercase',
+                  color: 'var(--ink-700)',
+                  marginBottom: '8px'
+                }}
+              >
+                <User size={13} style={{ color: 'var(--aura-teal)' }} />
+                <span>VERBATIM WORKER NARRATIVE</span>
+              </span>
+              <p
+                style={{
+                  fontStyle: 'italic',
+                  color: 'var(--ink-950)',
+                  fontSize: '15px',
+                  lineHeight: 1.5
+                }}
+              >
+                "{report.narrative || 'Worker stated pressure spiked rapidly while adjusting valve 4.'}"
+              </p>
             </div>
-          )}
+
+            {/* Agent Read-Back and Confirmation */}
+            <div
+              style={{
+                backgroundColor: 'var(--bg-app)',
+                border: '1px solid var(--border-subtle)',
+                borderRadius: 'var(--radius-sm)',
+                padding: '16px'
+              }}
+            >
+              <span
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  fontSize: '11px',
+                  fontWeight: 800,
+                  letterSpacing: '0.08em',
+                  textTransform: 'uppercase',
+                  color: 'var(--ink-700)',
+                  marginBottom: '8px'
+                }}
+              >
+                <CheckCircle2 size={13} style={{ color: 'var(--success-green)' }} />
+                <span>AGENT READ-BACK & EXPLICIT CONFIRMATION GATE</span>
+              </span>
+              <p
+                style={{
+                  color: 'var(--ink-700)',
+                  fontSize: '14px',
+                  lineHeight: 1.5
+                }}
+              >
+                "I have logged a near miss for <strong>{report.equipment}</strong> at <strong>{report.location}</strong>. Hazard: <strong>{report.hazard_type}</strong>. Worker explicitly confirmed: 'Yes, file it'."
+              </p>
+            </div>
+          </div>
         </div>
 
-        {/* Center Column: Transcript & Read-back */}
-        <div style={{ backgroundColor: '#1e293b', padding: '20px', borderRadius: '8px', border: '1px solid #334155' }}>
-          <h3 style={{ borderBottom: '1px solid #334155', paddingBottom: '8px', marginBottom: '16px', color: '#38bdf8' }}>
-            Worker Narrative & Read-Back
-          </h3>
-          <div style={{ backgroundColor: '#0f172a', padding: '14px', borderRadius: '6px', marginBottom: '16px' }}>
-            <span style={{ fontSize: '0.75rem', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>VERBATIM NARRATIVE</span>
-            <p style={{ fontStyle: 'italic', color: '#e2e8f0' }}>"{report.narrative || 'Worker stated pressure spiked rapidly while adjusting valve 4.'}"</p>
-          </div>
-          <div style={{ backgroundColor: '#0f172a', padding: '14px', borderRadius: '6px' }}>
-            <span style={{ fontSize: '0.75rem', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>AGENT READ-BACK & CONFIRMATION</span>
-            <p style={{ color: '#cbd5e1', fontSize: '0.9rem' }}>
-              "I have logged a near miss for {report.equipment} at {report.location}. Hazard: {report.hazard_type}. Worker explicitly confirmed: 'Yes, file it'."
-            </p>
-          </div>
-        </div>
-
-        {/* Right Column: Patterns & Corrective Action */}
-        <div style={{ backgroundColor: '#1e293b', padding: '20px', borderRadius: '8px', border: '1px solid #334155' }}>
-          <h3 style={{ borderBottom: '1px solid #334155', paddingBottom: '8px', marginBottom: '16px', color: '#38bdf8' }}>
-            Pattern Intelligence & CA
-          </h3>
-          {pattern_signal && pattern_signal.recurring ? (
-            <div style={{ backgroundColor: '#581c87', padding: '12px', borderRadius: '6px', color: '#e9d5ff', marginBottom: '16px' }}>
-              <strong>⚠️ Recurring Hazard Signal</strong>
-              <p style={{ fontSize: '0.875rem', marginTop: '4px' }}>{pattern_signal.sentence}</p>
+        {/* Right Intelligence Rail (Contextual Signals, CA, Similar Incidents) */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+          {/* Card 3: Pattern Intelligence Signal */}
+          <div
+            style={{
+              backgroundColor: 'var(--bg-surface)',
+              padding: '24px',
+              borderRadius: 'var(--radius-card)',
+              border: '1px solid var(--border-subtle)',
+              boxShadow: 'var(--shadow-card)'
+            }}
+          >
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                paddingBottom: '12px',
+                marginBottom: '16px',
+                borderBottom: '1px solid var(--border-subtle)'
+              }}
+            >
+              <AlertTriangle size={18} style={{ color: 'var(--warning-amber)' }} />
+              <h3
+                style={{
+                  fontSize: '13px',
+                  fontWeight: 800,
+                  letterSpacing: '0.08em',
+                  textTransform: 'uppercase',
+                  color: 'var(--warning-amber-text)'
+                }}
+              >
+                Pattern Intelligence
+              </h3>
             </div>
-          ) : (
-            <p style={{ color: '#94a3b8', fontSize: '0.875rem', marginBottom: '16px' }}>No prior recurring pattern flags for this equipment.</p>
-          )}
 
+            {pattern_signal && pattern_signal.recurring ? (
+              <div
+                style={{
+                  backgroundColor: 'var(--warning-amber-bg)',
+                  border: '1px solid var(--warning-amber-border)',
+                  borderRadius: 'var(--radius-sm)',
+                  padding: '16px',
+                  color: 'var(--warning-amber-text)'
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
+                  <AlertTriangle size={16} />
+                  <strong style={{ fontSize: '14px' }}>RECURRING HAZARD DETECTED</strong>
+                </div>
+                <p style={{ fontSize: '13px', lineHeight: 1.4 }}>
+                  {pattern_signal.sentence}
+                </p>
+                <div style={{ marginTop: '8px', fontSize: '12px', fontWeight: 700 }}>
+                  Signal Frequency: {pattern_signal.count} occurrences
+                </div>
+              </div>
+            ) : (
+              <div
+                style={{
+                  backgroundColor: 'var(--bg-app)',
+                  border: '1px solid var(--border-subtle)',
+                  borderRadius: 'var(--radius-sm)',
+                  padding: '16px',
+                  color: 'var(--ink-700)',
+                  fontSize: '13px'
+                }}
+              >
+                No prior recurring pattern alerts flagged for {report.equipment}.
+              </div>
+            )}
+          </div>
+
+          {/* Card 4: Draft Corrective Action */}
           {corrective_action && (
-            <div style={{ backgroundColor: '#0f172a', padding: '12px', borderRadius: '6px' }}>
-              <span style={{ fontSize: '0.75rem', color: '#38bdf8', fontWeight: 600 }}>DRAFT CORRECTIVE ACTION</span>
-              <p style={{ color: '#f8fafc', fontSize: '0.9rem', marginTop: '4px' }}>{corrective_action.proposed_action}</p>
-              <span style={{ fontSize: '0.75rem', color: '#f59e0b', marginTop: '6px', display: 'block' }}>Status: Pending Supervisor Approval</span>
+            <div
+              style={{
+                backgroundColor: 'var(--bg-surface)',
+                padding: '24px',
+                borderRadius: 'var(--radius-card)',
+                border: '1px solid var(--border-subtle)',
+                boxShadow: 'var(--shadow-card)'
+              }}
+            >
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  paddingBottom: '12px',
+                  marginBottom: '16px',
+                  borderBottom: '1px solid var(--border-subtle)'
+                }}
+              >
+                <Sparkles size={18} style={{ color: 'var(--aura-teal)' }} />
+                <h3
+                  style={{
+                    fontSize: '13px',
+                    fontWeight: 800,
+                    letterSpacing: '0.08em',
+                    textTransform: 'uppercase',
+                    color: 'var(--aura-teal)'
+                  }}
+                >
+                  Proposed Corrective Action
+                </h3>
+              </div>
+
+              <div
+                style={{
+                  backgroundColor: 'var(--surface-container)',
+                  border: '1px solid var(--border-subtle)',
+                  borderLeft: '4px solid var(--aura-teal)',
+                  borderRadius: 'var(--radius-sm)',
+                  padding: '16px'
+                }}
+              >
+                <span
+                  style={{
+                    fontSize: '11px',
+                    fontWeight: 800,
+                    letterSpacing: '0.08em',
+                    textTransform: 'uppercase',
+                    color: 'var(--aura-teal)',
+                    display: 'block',
+                    marginBottom: '6px'
+                  }}
+                >
+                  DRAFT ACTION ITEM
+                </span>
+                <p style={{ color: 'var(--ink-950)', fontSize: '14px', lineHeight: 1.4 }}>
+                  {corrective_action.proposed_action}
+                </p>
+                <div style={{ marginTop: '10px' }}>
+                  <StatusBadge status={corrective_action.status || 'awaiting_review'} />
+                </div>
+              </div>
             </div>
           )}
+
+          {/* Card 5: Similar Historical Incidents */}
+          <div
+            style={{
+              backgroundColor: 'var(--bg-surface)',
+              padding: '24px',
+              borderRadius: 'var(--radius-card)',
+              border: '1px solid var(--border-subtle)',
+              boxShadow: 'var(--shadow-card)'
+            }}
+          >
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                paddingBottom: '12px',
+                marginBottom: '16px',
+                borderBottom: '1px solid var(--border-subtle)'
+              }}
+            >
+              <Layers size={18} style={{ color: 'var(--ink-700)' }} />
+              <h3
+                style={{
+                  fontSize: '13px',
+                  fontWeight: 800,
+                  letterSpacing: '0.08em',
+                  textTransform: 'uppercase',
+                  color: 'var(--ink-700)'
+                }}
+              >
+                Similar Historical Records
+              </h3>
+            </div>
+
+            {similar_reports && similar_reports.length > 0 ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                {similar_reports.map((sim: any, idx: number) => (
+                  <div
+                    key={idx}
+                    style={{
+                      padding: '12px',
+                      backgroundColor: 'var(--bg-app)',
+                      borderRadius: 'var(--radius-sm)',
+                      border: '1px solid var(--border-subtle)',
+                      fontSize: '13px'
+                    }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                      <strong style={{ color: 'var(--ink-950)' }}>{sim.equipment || sim.title || 'Similar Report'}</strong>
+                      <span style={{ color: 'var(--aura-teal)', fontWeight: 700 }}>
+                        {sim.similarity_score ? `${Math.round(sim.similarity_score * 100)}% match` : ''}
+                      </span>
+                    </div>
+                    <p style={{ color: 'var(--ink-700)' }}>{sim.narrative || sim.summary}</p>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div
+                style={{
+                  backgroundColor: 'var(--bg-app)',
+                  padding: '16px',
+                  borderRadius: 'var(--radius-sm)',
+                  border: '1px solid var(--border-subtle)',
+                  color: 'var(--ink-700)',
+                  fontSize: '13px'
+                }}
+              >
+                No previous similar incidents identified within threshold.
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
-      {/* Reject Modal */}
+      {/* Reject Modal with AURA Safety Scrim */}
       {showRejectModal && (
-        <div style={{
-          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-          backgroundColor: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center'
-        }}>
-          <div style={{ backgroundColor: '#1e293b', padding: '24px', borderRadius: '8px', width: '400px', border: '1px solid #334155' }}>
-            <h3 style={{ marginBottom: '12px', color: '#ef4444' }}>Reject Near-Miss Report</h3>
-            <p style={{ fontSize: '0.875rem', color: '#cbd5e1', marginBottom: '12px' }}>Please provide a reason for rejecting this report:</p>
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="reject-dialog-title"
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(17, 28, 36, 0.65)',
+            backdropFilter: 'blur(2px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 100,
+            padding: '20px'
+          }}
+        >
+          <div
+            style={{
+              backgroundColor: 'var(--bg-surface)',
+              padding: '28px',
+              borderRadius: 'var(--radius-card)',
+              width: '100%',
+              maxWidth: '460px',
+              border: '1px solid var(--danger-red-border)',
+              boxShadow: 'var(--shadow-elevated)'
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
+              <ShieldAlert size={22} style={{ color: 'var(--danger-red)' }} />
+              <h3
+                id="reject-dialog-title"
+                style={{
+                  fontSize: '18px',
+                  fontWeight: 800,
+                  color: 'var(--danger-red)',
+                  margin: 0
+                }}
+              >
+                Reject Near-Miss Report
+              </h3>
+            </div>
+
+            <p style={{ fontSize: '14px', color: 'var(--ink-700)', marginBottom: '14px', lineHeight: 1.4 }}>
+              A permanent audit justification is required to reject this filed near miss. This action cannot be undone.
+            </p>
+
             <textarea
-              rows={3}
+              rows={4}
               value={rejectReason}
               onChange={e => setRejectReason(e.target.value)}
-              style={{ width: '100%', padding: '8px', borderRadius: '4px', backgroundColor: '#0f172a', color: '#fff', border: '1px solid #475569', marginBottom: '16px' }}
-              placeholder="e.g. Duplicate report filed by another technician."
+              placeholder="e.g. Duplicate report filed by another technician; asset already decommissioned."
+              aria-label="Rejection justification reason"
+              style={{
+                width: '100%',
+                padding: '12px',
+                borderRadius: 'var(--radius-sm)',
+                backgroundColor: 'var(--bg-app)',
+                color: 'var(--ink-950)',
+                border: '1px solid var(--border-subtle)',
+                fontSize: '14px',
+                fontFamily: 'inherit',
+                marginBottom: '20px',
+                boxSizing: 'border-box',
+                outline: 'none'
+              }}
+              onFocus={(e) => (e.target.style.borderColor = 'var(--danger-red)')}
+              onBlur={(e) => (e.target.style.borderColor = 'var(--border-subtle)')}
             />
+
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
-              <button onClick={() => setShowRejectModal(false)} style={{ backgroundColor: '#334155', color: '#fff', padding: '6px 12px', borderRadius: '4px' }}>
+              <button
+                onClick={() => setShowRejectModal(false)}
+                style={{
+                  height: '42px',
+                  padding: '0 16px',
+                  borderRadius: 'var(--radius-sm)',
+                  backgroundColor: 'var(--bg-app)',
+                  color: 'var(--ink-950)',
+                  border: '1px solid var(--border-subtle)',
+                  fontSize: '13px',
+                  fontWeight: 600,
+                  cursor: 'pointer'
+                }}
+              >
                 Cancel
               </button>
-              <button onClick={handleReject} style={{ backgroundColor: '#dc2626', color: '#fff', padding: '6px 12px', borderRadius: '4px', fontWeight: 600 }}>
+              <button
+                onClick={handleReject}
+                disabled={!rejectReason.trim()}
+                style={{
+                  height: '42px',
+                  padding: '0 20px',
+                  borderRadius: 'var(--radius-sm)',
+                  backgroundColor: 'var(--danger-red)',
+                  color: '#FFFFFF',
+                  border: 'none',
+                  fontSize: '13px',
+                  fontWeight: 700,
+                  cursor: rejectReason.trim() ? 'pointer' : 'not-allowed',
+                  opacity: rejectReason.trim() ? 1 : 0.6,
+                  boxShadow: 'var(--shadow-card)'
+                }}
+              >
                 Confirm Rejection
               </button>
             </div>
