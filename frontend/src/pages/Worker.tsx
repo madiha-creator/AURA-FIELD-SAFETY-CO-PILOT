@@ -409,30 +409,6 @@ export default function Worker() {
               isHeadsetConnected={session.hasHeadset}
               isPttActive={session.isPttActive}
             />
-
-            {/* Caption Drawer & Text Fallback Toggle Pill */}
-            <div style={{ display: 'flex', justifyContent: 'center', marginTop: '-4px' }}>
-              <button
-                onClick={() => setIsTranscriptOpen(true)}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '8px',
-                  backgroundColor: 'var(--bg-surface)',
-                  border: '1px solid var(--border-subtle)',
-                  padding: '8px 16px',
-                  borderRadius: '9999px',
-                  fontSize: '13px',
-                  fontWeight: 700,
-                  color: 'var(--ink-700)',
-                  cursor: 'pointer',
-                  boxShadow: '0 1px 3px rgba(17, 28, 36, 0.04)'
-                }}
-              >
-                <MessageSquare size={16} color="var(--aura-teal)" />
-                View Live Transcript & Keyboard Fallback
-              </button>
-            </div>
           </div>
         );
     }
@@ -462,6 +438,49 @@ export default function Worker() {
       )}
 
       {renderTabContent()}
+
+      {/* FE-003: Glove-friendly Keyboard Fallback Access Button for Active Workflows */}
+      {activeTab === 'voice' &&
+        !isSafetyModalOpen &&
+        ['home', 'procedure', 'narrative_capture', 'follow_up', 'read_back', 'draft_review', 'confirm_report'].includes(
+          engine.workflowMode
+        ) && (
+          <div style={{ marginTop: '20px', display: 'flex', justifyContent: 'center' }}>
+            <button
+              onClick={() => setIsTranscriptOpen(true)}
+              aria-label="View Live Transcript & Keyboard Fallback"
+              style={{
+                width: '100%',
+                minHeight: 'var(--touch-target-min, 56px)',
+                height: '56px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '10px',
+                backgroundColor: 'var(--bg-surface)',
+                border: '1.5px solid var(--border-subtle)',
+                borderRadius: 'var(--radius-btn, 14px)',
+                fontSize: '15px',
+                fontWeight: 700,
+                color: 'var(--ink-950)',
+                cursor: 'pointer',
+                boxShadow: '0 2px 4px rgba(17, 28, 36, 0.04)',
+                transition: 'all 0.15s ease-out'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = 'var(--bg-secondary-surface)';
+                e.currentTarget.style.borderColor = 'var(--aura-teal)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = 'var(--bg-surface)';
+                e.currentTarget.style.borderColor = 'var(--border-subtle)';
+              }}
+            >
+              <MessageSquare size={20} color="var(--aura-teal)" />
+              <span>View Live Transcript & Keyboard Fallback</span>
+            </button>
+          </div>
+        )}
 
       {/* Critical Safety Alert Modal (Sentinel Trip Override) */}
       {engine.safetyAlert && isSafetyModalOpen && (

@@ -20,8 +20,38 @@ export const TranscriptDrawer: React.FC<TranscriptDrawerProps> = ({
   partialUserText
 }) => {
   const [inputText, setInputText] = useState('');
+  const [isInputFocused, setIsInputFocused] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const previouslyFocusedElementRef = useRef<HTMLElement | null>(null);
 
+  // Auto-focus input when drawer opens, restore focus on close, and handle Escape key
+  useEffect(() => {
+    if (!isOpen) return;
+
+    previouslyFocusedElementRef.current = document.activeElement as HTMLElement | null;
+
+    const timer = window.setTimeout(() => {
+      inputRef.current?.focus();
+    }, 50);
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        onClose();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      window.clearTimeout(timer);
+      window.removeEventListener('keydown', handleKeyDown);
+      previouslyFocusedElementRef.current?.focus?.();
+    };
+  }, [isOpen, onClose]);
+
+  // Keep transcript view scrolled to bottom on new messages
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
@@ -254,9 +284,12 @@ export const TranscriptDrawer: React.FC<TranscriptDrawerProps> = ({
           }}
         >
           <input
+            ref={inputRef}
             type="text"
             value={inputText}
             onChange={(e) => setInputText(e.target.value)}
+            onFocus={() => setIsInputFocused(true)}
+            onBlur={() => setIsInputFocused(false)}
             placeholder="Type a voice command or report field..."
             style={{
               flex: 1,
@@ -264,11 +297,13 @@ export const TranscriptDrawer: React.FC<TranscriptDrawerProps> = ({
               minHeight: 'var(--touch-target-min)',
               padding: '0 16px',
               borderRadius: 'var(--radius-btn)',
-              border: '1.5px solid var(--border-subtle)',
+              border: isInputFocused ? '2px solid var(--aura-teal)' : '1.5px solid var(--border-subtle)',
               backgroundColor: 'var(--bg-app)',
               fontSize: '16px',
               color: 'var(--ink-950)',
-              outline: 'none'
+              outline: 'none',
+              boxShadow: isInputFocused ? '0 0 0 2px rgba(14, 119, 116, 0.2)' : 'none',
+              transition: 'border-color 0.15s ease, box-shadow 0.15s ease'
             }}
           />
           <button
