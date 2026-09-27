@@ -1,5 +1,5 @@
 import React from 'react';
-import { User } from 'lucide-react';
+import { User, MessageSquare } from 'lucide-react';
 import { AuraLogoSvg } from '../voice/AuraLogoSvg';
 
 interface WorkerHeaderProps {
@@ -8,6 +8,7 @@ interface WorkerHeaderProps {
   siteId?: string;
   siteTime?: string;
   onProfileClick?: () => void;
+  onTranscriptClick?: () => void;
 }
 
 export const WorkerHeader: React.FC<WorkerHeaderProps> = ({
@@ -15,7 +16,8 @@ export const WorkerHeader: React.FC<WorkerHeaderProps> = ({
   batteryLevel = 98,
   siteId = '03',
   siteTime = '09:41',
-  onProfileClick
+  onProfileClick,
+  onTranscriptClick
 }) => {
   const handleAvatarClick = () => {
     if (onProfileClick) {
@@ -104,28 +106,52 @@ export const WorkerHeader: React.FC<WorkerHeaderProps> = ({
         </div>
       </div>
 
-      {/* Right User / Profile Button */}
-      <button
-        onClick={handleAvatarClick}
-        aria-label="Worker Profile"
-        style={{
-          width: '42px',
-          height: '42px',
-          borderRadius: '50%',
-          backgroundColor: 'var(--aura-teal)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          color: 'var(--bg-surface)',
-          cursor: 'pointer',
-          border: 'none',
-          boxShadow: '0 2px 4px rgba(17, 28, 36, 0.1)',
-          flexShrink: 0
-        }}
-        title="Worker Profile"
-      >
-        <User size={22} strokeWidth={2.2} />
-      </button>
+      {/* Right Actions: Transcript & Profile Buttons */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+        {onTranscriptClick && (
+          <button
+            onClick={onTranscriptClick}
+            aria-label="Live Transcript and Keyboard Fallback"
+            title="Live Transcript & Keyboard Fallback"
+            style={{
+              width: '42px',
+              height: '42px',
+              borderRadius: '50%',
+              backgroundColor: 'var(--surface-container-low)',
+              border: '1px solid var(--border-subtle)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: 'var(--aura-teal)',
+              cursor: 'pointer',
+              flexShrink: 0
+            }}
+          >
+            <MessageSquare size={20} />
+          </button>
+        )}
+        <button
+          onClick={handleAvatarClick}
+          aria-label="Worker Profile"
+          title="Worker Profile"
+          style={{
+            width: '42px',
+            height: '42px',
+            borderRadius: '50%',
+            backgroundColor: 'var(--aura-teal)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: 'var(--bg-surface)',
+            cursor: 'pointer',
+            border: 'none',
+            boxShadow: '0 2px 4px rgba(17, 28, 36, 0.1)',
+            flexShrink: 0
+          }}
+        >
+          <User size={22} strokeWidth={2.2} />
+        </button>
+      </div>
     </header>
   );
 };

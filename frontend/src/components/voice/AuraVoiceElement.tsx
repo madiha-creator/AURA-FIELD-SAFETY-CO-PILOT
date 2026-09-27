@@ -32,12 +32,10 @@ export const AuraVoiceElement: React.FC<AuraVoiceElementProps> = ({
     if (variant === 'danger') {
       return {
         boxShadow: isSpeaking
-          ? '0 0 42px rgba(201, 54, 43, 0.75), 0 0 84px rgba(201, 54, 43, 0.4)'
-          : isListening
-          ? '0 0 32px rgba(201, 54, 43, 0.5)'
-          : '0 0 20px rgba(201, 54, 43, 0.35)',
+          ? '0 0 0 5px rgba(201, 54, 43, 0.45), 0 0 48px rgba(201, 54, 43, 0.8), 0 0 96px rgba(201, 54, 43, 0.5), 0 0 140px rgba(201, 54, 43, 0.28)'
+          : '0 0 0 4px rgba(201, 54, 43, 0.35), 0 0 36px rgba(201, 54, 43, 0.65), 0 0 72px rgba(201, 54, 43, 0.42), 0 0 110px rgba(201, 54, 43, 0.22)',
         border: '3px solid var(--danger-red)',
-        animation: isSpeaking ? 'glow-pulse-danger 1.4s ease-in-out infinite' : undefined
+        animation: 'glow-pulse-danger 2s ease-in-out infinite'
       };
     }
 
@@ -112,18 +110,21 @@ export const AuraVoiceElement: React.FC<AuraVoiceElementProps> = ({
       <div
         style={{
           position: 'absolute',
-          top: '-10px',
-          left: '-10px',
-          right: '-10px',
-          bottom: '-10px',
+          top: '-12px',
+          left: '-12px',
+          right: '-12px',
+          bottom: '-12px',
           borderRadius: '50%',
           border: variant === 'danger'
-            ? '2px solid rgba(201, 54, 43, 0.35)'
+            ? '2px solid rgba(201, 54, 43, 0.65)'
             : variant === 'success'
             ? '2px solid rgba(35, 122, 75, 0.35)'
             : '2px solid rgba(14, 119, 116, 0.3)',
-          opacity: isListening || isSpeaking ? 1 : 0.4,
-          transition: 'opacity 0.3s ease',
+          boxShadow: variant === 'danger'
+            ? '0 0 28px rgba(201, 54, 43, 0.4)'
+            : undefined,
+          opacity: variant === 'danger' ? 0.95 : (isListening || isSpeaking ? 1 : 0.4),
+          transition: 'opacity 0.3s ease, border-color 0.3s ease',
           pointerEvents: 'none'
         }}
       />

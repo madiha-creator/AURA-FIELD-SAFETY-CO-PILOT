@@ -8,6 +8,7 @@ import {
   VoiceSessionEvents,
   TranscriptEntry
 } from '../types/voiceSession';
+import { SafetyAlertData } from '../types/workerWorkflows';
 
 export function useVoiceSession(): [VoiceSessionState, VoiceSessionEvents] {
   const [voiceState, setVoiceState] = useState<VoiceState>('ready');
@@ -21,6 +22,18 @@ export function useVoiceSession(): [VoiceSessionState, VoiceSessionEvents] {
   );
   const [lastAuraAudioChunk, setLastAuraAudioChunk] = useState<string | undefined>(undefined);
   const [errorDetail, setErrorDetail] = useState<string | undefined>(undefined);
+  const [sessionId, setSessionId] = useState<string>(() => {
+    try {
+      const saved = sessionStorage.getItem('aura_voice_session_id');
+      if (saved) return saved;
+    } catch {}
+    const sid = 'session_' + Math.random().toString(36).substring(2, 10);
+    try {
+      sessionStorage.setItem('aura_voice_session_id', sid);
+    } catch {}
+    return sid;
+  });
+  const [activeSafetyAlert, setActiveSafetyAlert] = useState<SafetyAlertData | null>(null);
   const [transcripts, setTranscripts] = useState<TranscriptEntry[]>([
     {
       id: 'init-aura',
@@ -35,6 +48,8 @@ export function useVoiceSession(): [VoiceSessionState, VoiceSessionEvents] {
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const processingTimerRef = useRef<number | null>(null);
   const speakingTimerRef = useRef<number | null>(null);
+  const activeSafetyAlertRef = useRef<SafetyAlertData | null>(null);
+  const isDangerLockedRef = useRef<boolean>(false);
 
   // Initialize AudioManager on mount
   useEffect(() => {
@@ -77,7 +92,10 @@ export function useVoiceSession(): [VoiceSessionState, VoiceSessionEvents] {
 
       if (!res.ok) throw new Error(`Token fetch failed (${res.status})`);
       const tokenData = await res.json();
-      const wsUrl = tokenData.ws_url || `ws://127.0.0.1:5000/v1/ws?token=${tokenData.token}`;
+      const baseWs = tokenData.ws_url || `ws://127.0.0.1:5000/v1/ws?token=${tokenData.token}`;
+      const wsUrl = baseWs.includes('session_id=')
+        ? baseWs
+        : `${baseWs}${baseWs.includes('?') ? '&' : '?'}session_id=${encodeURIComponent(sessionId)}`;
 
       const ws = new WebSocket(wsUrl);
       wsRef.current = ws;
@@ -90,27 +108,68 @@ export function useVoiceSession(): [VoiceSessionState, VoiceSessionEvents] {
       ws.onmessage = (event) => {
         try {
           const msg = JSON.parse(event.data);
-          if (msg.type === 'reply.audio') {
+          if (msg.type === 'session.ready') {
+            setIsConnected(true);
+            setVoiceState('ready');
+            if (msg.session_id) {
+              setSessionId(msg.session_id);
+              try { sessionStorage.setItem('aura_voice_session_id', msg.session_id); } catch {}
+            }
+          } else if (msg.type === 'reply.audio') {
             setLastAuraAudioChunk(msg.audio);
             audioManagerRef.current?.enqueueChunk(msg.audio);
             setVoiceState('speaking');
           } else if (msg.type === 'agent_reply') {
-            setLastAuraResponse(msg.text);
-            setCurrentCaption(msg.text);
             addTranscript('aura', msg.text);
+            setLastAuraResponse(msg.text);
+
+            // If an active safety alert is currently commanding the interface,
+            // do NOT let a trailing normal agent_reply dismiss the safety alert or danger variant!
+            if (activeSafetyAlertRef.current !== null || isDangerLockedRef.current) {
+              setSemanticVariant('danger');
+              audioManagerRef.current?.stopAndClear();
+              return;
+            }
+
+            setCurrentCaption(msg.text);
+            if (msg.safe_to_report === false) {
+              setSemanticVariant('danger');
+            }
             setVoiceState('speaking');
             if (speakingTimerRef.current) window.clearTimeout(speakingTimerRef.current);
             speakingTimerRef.current = window.setTimeout(() => {
-              setVoiceState('ready');
-              setCurrentCaption('Ready when you are.');
+              if (activeSafetyAlertRef.current === null && !isDangerLockedRef.current) {
+                setVoiceState('ready');
+              }
             }, 4500);
           } else if (msg.type === 'safety_alert') {
             audioManagerRef.current?.stopAndClear();
+            if (speakingTimerRef.current) window.clearTimeout(speakingTimerRef.current);
+            if (processingTimerRef.current) window.clearTimeout(processingTimerRef.current);
             setSemanticVariant('danger');
             setVoiceState('interrupted');
-            const alertMsg = msg.message || 'Safety threshold boundary exceeded!';
+            isDangerLockedRef.current = true;
+            const alertMsg = msg.message || (msg.alert && msg.alert.message) || 'Safety threshold boundary exceeded!';
             setCurrentCaption(`SAFETY ALERT: ${alertMsg}`);
             addTranscript('system', `CRITICAL SAFETY INTERRUPT: ${alertMsg}`);
+
+            const rawAlert = msg.alert || {};
+            const alertData: SafetyAlertData = {
+              title: rawAlert.severity === 'critical' ? 'CRITICAL SENTINEL TRIP' : 'SAFETY THRESHOLD WARNING',
+              parameter: rawAlert.parameter || 'pressure',
+              measuredValue: typeof rawAlert.measured_value === 'number' ? rawAlert.measured_value : 0,
+              unit: rawAlert.unit || 'PSI',
+              expectedRange: rawAlert.expected_range || { min: 4.0, max: 10.0 },
+              deviationPct: typeof rawAlert.deviation_pct === 'number' ? rawAlert.deviation_pct : 0,
+              severity: rawAlert.severity === 'critical' ? 'critical' : 'warn',
+              message: alertMsg,
+              prescribedAction: rawAlert.severity === 'critical'
+                ? '1. Cease current operation immediately.\n2. Isolate equipment and verify physical hazard clearance.\n3. Do not proceed until verified safe.\n4. Acknowledge and report to shift supervisor.'
+                : '1. Verify operating parameters before continuing.\n2. Check equipment connections and calibrate sensors.',
+              sourceContext: 'general'
+            };
+            activeSafetyAlertRef.current = alertData;
+            setActiveSafetyAlert(alertData);
           }
         } catch {
           // Ignore non-json frames
@@ -128,7 +187,7 @@ export function useVoiceSession(): [VoiceSessionState, VoiceSessionEvents] {
       // Backend is offline or unreachable; fallback to standalone offline mode
       setIsConnected(false);
     }
-  }, [addTranscript]);
+  }, [addTranscript, sessionId]);
 
   // Try initial backend connection once on mount
   useEffect(() => {
@@ -174,13 +233,21 @@ export function useVoiceSession(): [VoiceSessionState, VoiceSessionEvents] {
     if (processingTimerRef.current) window.clearTimeout(processingTimerRef.current);
 
     setVoiceState('interrupted');
-    setCurrentCaption('PAUSED — YOUR TURN');
     addTranscript('system', 'Agent audio interrupted by worker.');
 
-    // Transition back to ready after short acknowledgement
+    if (activeSafetyAlertRef.current !== null || isDangerLockedRef.current) {
+      setSemanticVariant('danger');
+      return;
+    }
+
+    setCurrentCaption('PAUSED — YOUR TURN');
+
+    // Transition back to ready after short acknowledgement only if not in danger
     speakingTimerRef.current = window.setTimeout(() => {
-      setVoiceState('ready');
-      setCurrentCaption('Ready when you are.');
+      if (activeSafetyAlertRef.current === null && !isDangerLockedRef.current) {
+        setVoiceState('ready');
+        setCurrentCaption('Ready when you are.');
+      }
     }, 1500);
   }, [addTranscript]);
 
@@ -202,8 +269,13 @@ export function useVoiceSession(): [VoiceSessionState, VoiceSessionEvents] {
     // Set duration timer for replay completion
     const duration = Math.min(8000, Math.max(3000, lastAuraResponse.length * 65));
     speakingTimerRef.current = window.setTimeout(() => {
-      setVoiceState('ready');
-      setCurrentCaption('Ready when you are.');
+      if (activeSafetyAlertRef.current !== null || isDangerLockedRef.current) {
+        setVoiceState('interrupted');
+        setSemanticVariant('danger');
+      } else {
+        setVoiceState('ready');
+        setCurrentCaption('Ready when you are.');
+      }
     }, duration);
   }, [lastAuraResponse, lastAuraAudioChunk]);
 
@@ -242,6 +314,28 @@ export function useVoiceSession(): [VoiceSessionState, VoiceSessionEvents] {
         } else if (lower.includes('psi') || lower.includes('pressure') || lower.includes('danger') || lower.includes('alert')) {
           reply = 'WARNING: Measured pressure is outside approved parameters (4.0 - 10.0 PSI). Isolate line immediately.';
           variant = 'danger';
+
+          const rawNumbers = text.match(/[-+]?\d*\.?\d+/g);
+          const parsedVal = rawNumbers ? parseFloat(rawNumbers[0]) : 15;
+          const min = 4.0;
+          const max = 10.0;
+          const span = max - min;
+          const deviation = parsedVal > max ? ((parsedVal - max) / span) * 100 : ((min - parsedVal) / span) * 100;
+          const alertData: SafetyAlertData = {
+            title: 'CRITICAL SENTINEL TRIP',
+            parameter: 'coolant line pressure',
+            measuredValue: parsedVal,
+            unit: 'PSI',
+            expectedRange: { min, max },
+            deviationPct: Math.round(deviation * 10) / 10,
+            severity: 'critical',
+            message: `Measured ${parsedVal} PSI exceeds safe operating range (${min} – ${max} PSI) by +${Math.round(deviation)}%.`,
+            prescribedAction: '1. Cease current operation immediately.\n2. Close isolation valve SV-2.\n3. Do not attempt adjustment until pressure relieves.\n4. Notify shift safety supervisor.',
+            sourceContext: 'general'
+          };
+          activeSafetyAlertRef.current = alertData;
+          isDangerLockedRef.current = true;
+          setActiveSafetyAlert(alertData);
         } else if (lower.includes('confirm') || lower.includes('safe') || lower.includes('done') || lower.includes('clear')) {
           reply = 'Parameters verified within safe operating range. Check complete.';
           variant = 'success';
@@ -251,13 +345,25 @@ export function useVoiceSession(): [VoiceSessionState, VoiceSessionEvents] {
         setLastAuraResponse(reply);
         setCurrentCaption(reply);
         addTranscript('aura', reply);
-        setVoiceState('speaking');
 
-        speakingTimerRef.current = window.setTimeout(() => {
-          setVoiceState('ready');
-          setCurrentCaption('Ready when you are.');
-          setSemanticVariant('normal');
-        }, 4000);
+        if (variant === 'danger') {
+          // Safety alert state: initial announcement displays warning, then settles into locked interrupted danger state.
+          // Danger variant, alert data, and warning caption remain active until the worker explicitly acknowledges/dismisses it!
+          setVoiceState('speaking');
+          speakingTimerRef.current = window.setTimeout(() => {
+            setVoiceState('interrupted');
+            // Stays locked in danger state!
+          }, 3500);
+        } else {
+          setVoiceState('speaking');
+          speakingTimerRef.current = window.setTimeout(() => {
+            if (activeSafetyAlertRef.current === null && !isDangerLockedRef.current) {
+              setVoiceState('ready');
+              setCurrentCaption('Ready when you are.');
+              setSemanticVariant('normal');
+            }
+          }, 4000);
+        }
       }, 700);
     }
   }, [addTranscript]);
@@ -266,10 +372,34 @@ export function useVoiceSession(): [VoiceSessionState, VoiceSessionEvents] {
     setIsMicMuted(prev => !prev);
   }, []);
 
+  const dismissSafetyAlert = useCallback(() => {
+    activeSafetyAlertRef.current = null;
+    isDangerLockedRef.current = false;
+    setActiveSafetyAlert(null);
+    setSemanticVariant('normal');
+    setVoiceState('ready');
+    setCurrentCaption('Ready when you are.');
+    addTranscript('system', 'Worker acknowledged safety alert (local clearance).');
+  }, [addTranscript]);
+
+  const reconnect = useCallback(() => {
+    if (wsRef.current) {
+      try {
+        wsRef.current.close();
+      } catch {}
+    }
+    setVoiceState('reconnecting');
+    setCurrentCaption('Reconnecting to Aura Co-Pilot session...');
+    connectWebSocket();
+  }, [connectWebSocket]);
+
   const resetSession = useCallback(() => {
     audioManagerRef.current?.stopAndClear();
     if (speakingTimerRef.current) window.clearTimeout(speakingTimerRef.current);
     if (processingTimerRef.current) window.clearTimeout(processingTimerRef.current);
+    activeSafetyAlertRef.current = null;
+    isDangerLockedRef.current = false;
+    setActiveSafetyAlert(null);
     setVoiceState('ready');
     setSemanticVariant('normal');
     setCurrentCaption('Ready when you are.');
@@ -295,7 +425,9 @@ export function useVoiceSession(): [VoiceSessionState, VoiceSessionEvents] {
     lastAuraResponse,
     lastAuraAudioChunk,
     errorDetail,
-    transcripts
+    transcripts,
+    sessionId,
+    activeSafetyAlert
   };
 
   const events: VoiceSessionEvents = {
@@ -317,6 +449,11 @@ export function useVoiceSession(): [VoiceSessionState, VoiceSessionEvents] {
       }
     },
     agentStoppedSpeaking: () => {
+      if (activeSafetyAlertRef.current !== null || isDangerLockedRef.current) {
+        setVoiceState('interrupted');
+        setSemanticVariant('danger');
+        return;
+      }
       setVoiceState('ready');
       setCurrentCaption('Ready when you are.');
     },
@@ -346,7 +483,9 @@ export function useVoiceSession(): [VoiceSessionState, VoiceSessionEvents] {
     },
     resetSession,
     sendTextTurn,
-    setSemanticVariant
+    setSemanticVariant,
+    dismissSafetyAlert,
+    reconnect
   };
 
   return [state, events];

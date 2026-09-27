@@ -77,7 +77,7 @@ export const ProcedureGuideView: React.FC<ProcedureGuideViewProps> = ({
           <button
             onClick={onTogglePause}
             style={{
-              fontSize: '13px',
+              fontSize: '14px',
               fontWeight: 800,
               color: isPaused ? 'var(--warning-amber-text)' : 'var(--ink-700)',
               backgroundColor: isPaused ? 'var(--warning-amber-bg)' : 'var(--bg-surface)',
@@ -98,7 +98,7 @@ export const ProcedureGuideView: React.FC<ProcedureGuideViewProps> = ({
         <div style={{ marginTop: '8px' }}>
           <span
             style={{
-              fontSize: '12px',
+              fontSize: '14px',
               fontWeight: 800,
               letterSpacing: '0.08em',
               color: 'var(--aura-teal)',
@@ -194,12 +194,12 @@ export const ProcedureGuideView: React.FC<ProcedureGuideViewProps> = ({
               justifyContent: 'space-between'
             }}
           >
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', fontWeight: 800, letterSpacing: '0.04em' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '14px', fontWeight: 800, letterSpacing: '0.04em' }}>
               <Gauge size={18} />
               CHECK REQUIRED: {currentStep.readingParam?.toUpperCase()}
             </div>
             {currentStep.expectedRange && (
-              <span style={{ fontSize: '13px', fontWeight: 700 }}>
+              <span style={{ fontSize: '14px', fontWeight: 700 }}>
                 {currentStep.expectedRange.min} – {currentStep.expectedRange.max} {currentStep.expectedRange.unit}
               </span>
             )}
@@ -263,7 +263,7 @@ export const ProcedureGuideView: React.FC<ProcedureGuideViewProps> = ({
             backgroundColor: 'var(--surface-container-low)',
             padding: '10px 14px',
             borderRadius: '10px',
-            fontSize: '13px',
+            fontSize: '14px',
             fontWeight: 700,
             color: 'var(--aura-teal-dark)'
           }}
@@ -343,7 +343,7 @@ export const ProcedureGuideView: React.FC<ProcedureGuideViewProps> = ({
               Check
             </button>
           </form>
-          <div style={{ fontSize: '12px', color: 'var(--ink-500)', marginTop: '8px' }}>
+          <div style={{ fontSize: '14px', color: 'var(--ink-500)', marginTop: '8px' }}>
             Safe range: {currentStep.expectedRange?.min} – {currentStep.expectedRange?.max} {currentStep.expectedRange?.unit}. Out-of-range values trigger safety sentinels.
           </div>
         </div>

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { WorkerShell } from '../components/layout/WorkerShell';
 import { ShellTab } from '../components/layout/BottomNav';
 import { AuraVoiceElement } from '../components/voice/AuraVoiceElement';
@@ -7,6 +7,7 @@ import { DraftCard } from '../components/voice/DraftCard';
 import { ActionButtons } from '../components/voice/ActionButtons';
 import { DeviceStatusBar } from '../components/voice/DeviceStatusBar';
 import { TranscriptDrawer } from '../components/voice/TranscriptDrawer';
+import { SafetyAlertBanner } from '../components/voice/SafetyAlertBanner';
 import { useWorkerWorkflowEngine } from '../services/workerWorkflowEngine';
 import { SafetyGateView } from '../components/worker/SafetyGateView';
 import { NarrativeCaptureView } from '../components/worker/NarrativeCaptureView';
@@ -29,6 +30,14 @@ export default function Worker() {
   const [activeTab, setActiveTab] = useState<ShellTab>('voice');
   const [isTranscriptOpen, setIsTranscriptOpen] = useState<boolean>(false);
   const [isProfileOpen, setIsProfileOpen] = useState<boolean>(false);
+  const [isSafetyModalOpen, setIsSafetyModalOpen] = useState<boolean>(true);
+
+  // Automatically open modal when a new safety alert is received
+  useEffect(() => {
+    if (engine.safetyAlert) {
+      setIsSafetyModalOpen(true);
+    }
+  }, [engine.safetyAlert]);
 
   const handleVoiceOrbClick = () => {
     if (session.state === 'speaking' || session.state === 'replaying') {
@@ -59,6 +68,10 @@ export default function Worker() {
 
   // Status title and helper description matching FE-001 Frontline Voice Instrument
   const getDisplayHeading = () => {
+    if (engine.safetyAlert || session.variant === 'danger') {
+      if (session.state === 'speaking') return 'Aura: Safety Warning';
+      return 'Safety Alert Active';
+    }
     switch (session.state) {
       case 'listening':
         return 'Listening...';
@@ -85,6 +98,10 @@ export default function Worker() {
   };
 
   const getActionLabel = () => {
+    if (engine.safetyAlert || session.variant === 'danger') {
+      if (session.state === 'speaking') return 'TAP TO INTERRUPT';
+      return 'SAFETY ALERT ACTIVE';
+    }
     switch (session.state) {
       case 'listening':
         return 'TAP TO FINISH';
@@ -103,6 +120,9 @@ export default function Worker() {
   };
 
   const getActionSubtext = () => {
+    if (engine.safetyAlert || session.variant === 'danger') {
+      return 'Operating parameter outside safe threshold. Review warning and acknowledge to resume.';
+    }
     if (session.state === 'speaking' || session.state === 'replaying') {
       return 'Tap anywhere or speak to interrupt Aura instantly.';
     }
@@ -338,7 +358,7 @@ export default function Worker() {
               </div>
 
               {/* Active live caption / response banner */}
-              {session.currentCaption && session.state !== 'ready' && (
+              {session.currentCaption && session.currentCaption !== 'Ready when you are.' && (
                 <div
                   style={{
                     marginTop: '12px',
@@ -427,15 +447,28 @@ export default function Worker() {
       siteId={session.siteContext.siteId}
       siteTime={session.siteContext.timeString}
       onProfileClick={() => setIsProfileOpen(true)}
+      onTranscriptClick={() => setIsTranscriptOpen(true)}
       offlineNotice={!session.isConnected ? 'OPERATING IN OFFLINE LOCAL MODE — ALL VOICE SENTINELS ACTIVE' : undefined}
     >
+      {/* Frontline Safety Alert Banner (FE-002 Layer 2 Override) */}
+      {engine.safetyAlert && (
+        <div style={{ marginBottom: '18px' }}>
+          <SafetyAlertBanner
+            alert={engine.safetyAlert}
+            onViewProtocol={() => setIsSafetyModalOpen(true)}
+            onAcknowledge={engine.acknowledgeSafetyAlert}
+          />
+        </div>
+      )}
+
       {renderTabContent()}
 
       {/* Critical Safety Alert Modal (Sentinel Trip Override) */}
-      {engine.safetyAlert && (
+      {engine.safetyAlert && isSafetyModalOpen && (
         <SafetyAlertModal
           alert={engine.safetyAlert}
           onAcknowledge={engine.acknowledgeSafetyAlert}
+          onClose={() => setIsSafetyModalOpen(false)}
         />
       )}
 
@@ -446,6 +479,7 @@ export default function Worker() {
         transcripts={session.transcripts}
         onSendText={(text) => engine.handleWorkerInput(text)}
         activeCaption={session.currentCaption}
+        partialUserText={session.partialUserText}
       />
 
       {/* Worker Profile, Cheatsheet & Accessibility Settings Modal */}

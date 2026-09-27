@@ -11,6 +11,7 @@ interface WorkerShellProps {
   siteId?: string;
   siteTime?: string;
   onProfileClick?: () => void;
+  onTranscriptClick?: () => void;
   offlineNotice?: string;
 }
 
@@ -23,6 +24,7 @@ export const WorkerShell: React.FC<WorkerShellProps> = ({
   siteId = '03',
   siteTime = '09:41',
   onProfileClick,
+  onTranscriptClick,
   offlineNotice
 }) => {
   return (
@@ -42,6 +44,7 @@ export const WorkerShell: React.FC<WorkerShellProps> = ({
         siteId={siteId}
         siteTime={siteTime}
         onProfileClick={onProfileClick}
+        onTranscriptClick={onTranscriptClick}
       />
 
       {/* Offline Notice Banner if disconnected */}

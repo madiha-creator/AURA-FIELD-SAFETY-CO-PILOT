@@ -177,8 +177,15 @@ export function useWorkerWorkflowEngine() {
   const [isProcedurePaused, setIsProcedurePaused] = useState<boolean>(false);
   const [confirmedSteps, setConfirmedSteps] = useState<number[]>([]);
 
-  // Safety Alert State
-  const [safetyAlert, setSafetyAlert] = useState<SafetyAlertData | null>(null);
+  // Safety Alert State (Unified between backend WebSocket events and local threshold sentinels)
+  const [localSafetyAlert, setLocalSafetyAlert] = useState<SafetyAlertData | null>(null);
+  const safetyAlert = session.activeSafetyAlert || localSafetyAlert;
+
+  useEffect(() => {
+    if (session.activeSafetyAlert) {
+      setWorkflowMode('safety_alert');
+    }
+  }, [session.activeSafetyAlert]);
 
   // Pattern Check State
   const [patternResult, setPatternResult] = useState<PatternCheckResult | null>(null);
@@ -290,7 +297,7 @@ export function useWorkerWorkflowEngine() {
       events.interruptAgent();
       events.setSemanticVariant('danger');
 
-      setSafetyAlert({
+      setLocalSafetyAlert({
         title: 'STOP — SAFETY ALERT',
         parameter: param,
         measuredValue: value,
@@ -356,7 +363,8 @@ export function useWorkerWorkflowEngine() {
 
   // Acknowledge Safety Alert
   const acknowledgeSafetyAlert = useCallback(() => {
-    setSafetyAlert(null);
+    setLocalSafetyAlert(null);
+    events.dismissSafetyAlert();
     events.setSemanticVariant('normal');
     // Return to procedure if we were in procedure, else home
     if (activeProcedure) {
@@ -471,18 +479,27 @@ export function useWorkerWorkflowEngine() {
     // Context-dependent handling based on workflow mode
     switch (workflowMode) {
       case 'home':
+        events.sendTextTurn(trimmed);
+        {
+          const homeNumbers = trimmed.match(/[-+]?\d*\.?\d+/g);
+          if (homeNumbers && (lower.includes('psi') || lower.includes('pressure') || lower.includes('temp') || lower.includes('volt') || lower.includes('gauge'))) {
+            const val = parseFloat(homeNumbers[0]);
+            const param = lower.includes('temp') ? 'temperature' : lower.includes('volt') ? 'voltage' : 'coolant line pressure';
+            checkReadingThreshold(param, val);
+            return;
+          }
+        }
         if (lower.includes('check') || lower.includes('procedure') || lower.includes('walk me')) {
           startProcedureFlow('proc_coolant_flush');
         } else if (lower.includes('hazard') || lower.includes('near miss') || lower.includes('report')) {
           startReportingFlow();
         } else if (lower.includes('resume')) {
           setWorkflowMode('draft_review');
-        } else {
-          events.sendTextTurn(trimmed);
         }
         break;
 
       case 'safety_gate':
+        events.sendTextTurn(trimmed);
         if (lower.includes('yes') || lower.includes('safe') || lower.includes('clear')) {
           setHasSafeGatePassed(true);
           setWorkflowMode('narrative_capture');
@@ -492,6 +509,7 @@ export function useWorkerWorkflowEngine() {
         break;
 
       case 'narrative_capture':
+        events.sendTextTurn(trimmed);
         updateDraftField('narrative', trimmed, 'said');
         // Analyze narrative keywords
         if (lower.includes('bay 7')) updateDraftField('location', 'Bay 7 South Crossing', 'said');
@@ -505,6 +523,7 @@ export function useWorkerWorkflowEngine() {
         break;
 
       case 'follow_up':
+        events.sendTextTurn(trimmed);
         if (activeQuestionKey === 'injury') {
           updateDraftField('injury', trimmed, 'said');
           setActiveQuestionKey('location');
@@ -521,6 +540,7 @@ export function useWorkerWorkflowEngine() {
         break;
 
       case 'read_back':
+        events.sendTextTurn(trimmed);
         if (lower.includes('confirm') || lower.includes('yes') || lower.includes('continue') || lower.includes('correct')) {
           setWorkflowMode('draft_review');
         } else if (lower.includes('no') || lower.includes('not') || lower.includes('valve') || lower.includes('dock') || lower.includes('bay')) {
@@ -532,14 +552,14 @@ export function useWorkerWorkflowEngine() {
         break;
 
       case 'draft_review':
+        events.sendTextTurn(trimmed);
         if (lower.includes('confirm') || lower.includes('submit') || lower.includes('continue')) {
           setWorkflowMode('confirm_report');
-        } else {
-          events.sendTextTurn(trimmed);
         }
         break;
 
       case 'confirm_report':
+        events.sendTextTurn(trimmed);
         if (lower.includes('confirm') || lower.includes('submit') || lower.includes('yes')) {
           submitReport();
         } else if (lower.includes('edit') || lower.includes('change') || lower.includes('correct')) {
@@ -548,6 +568,7 @@ export function useWorkerWorkflowEngine() {
         break;
 
       case 'procedure': {
+        events.sendTextTurn(trimmed);
         // Check for numeric reading reports (e.g. "15 PSI" or "gauge reads 15")
         const numbers = trimmed.match(/[-+]?\d*\.?\d+/g);
         if (numbers && (lower.includes('psi') || lower.includes('reading') || lower.includes('gauge') || lower.includes('temp') || lower.includes('volt'))) {
@@ -563,14 +584,12 @@ export function useWorkerWorkflowEngine() {
           confirmAndAdvanceStep();
         } else if (lower.includes('repeat') || lower.includes('again')) {
           repeatCurrentStep();
-        } else {
-          // Contextual question (e.g. "Is 15 PSI safe?")
-          events.sendTextTurn(trimmed);
         }
         break;
       }
 
       case 'safety_alert':
+        events.sendTextTurn(trimmed);
         if (lower.includes('acknowledge') || lower.includes('clear') || lower.includes('got it')) {
           acknowledgeSafetyAlert();
         }
