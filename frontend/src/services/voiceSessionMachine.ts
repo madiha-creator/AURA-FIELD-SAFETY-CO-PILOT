@@ -85,7 +85,7 @@ export function useVoiceSession(): [VoiceSessionState, VoiceSessionEvents] {
     teardownCapture();
 
     const AudioCtxClass = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-    const ctx = new AudioCtxClass({ sampleRate: TURN_DETECTION_CONFIG.sample_rate });
+    const ctx = new AudioCtxClass(); // native device rate; the worklet resamples to 24 kHz
     if (ctx.state === 'suspended') {
       await ctx.resume();
     }
@@ -99,7 +99,9 @@ export function useVoiceSession(): [VoiceSessionState, VoiceSessionEvents] {
     }
 
     const source = ctx.createMediaStreamSource(stream);
-    const worklet = new AudioWorkletNode(ctx, 'pcm-processor');
+    const worklet = new AudioWorkletNode(ctx, 'pcm-processor', {
+      processorOptions: { targetRate: TURN_DETECTION_CONFIG.sample_rate },
+    });
 
     // Route through a silent gain node to the destination: some browsers only
     // pull audio worklet processing when the graph reaches the destination.
@@ -153,30 +155,69 @@ export function useVoiceSession(): [VoiceSessionState, VoiceSessionEvents] {
     return entry;
   }, []);
 
+  // Real headset detection (labels only appear after mic permission is granted)
+  const [hasHeadset, setHasHeadset] = useState<boolean>(false);
+  const refreshHeadsetRef = useRef<() => void>(() => {});
+  useEffect(() => {
+    const HEADSET_RE = /head(set|phone)|earbud|earphone|airpod|buds|bluetooth|hands-?free|jabra|plantronics|bose/i;
+    const refresh = async () => {
+      try {
+        if (!navigator.mediaDevices?.enumerateDevices) return;
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        setHasHeadset(devices.some(d => (d.kind === 'audioinput' || d.kind === 'audiooutput') && HEADSET_RE.test(d.label)));
+      } catch {
+        setHasHeadset(false);
+      }
+    };
+    refreshHeadsetRef.current = refresh;
+    refresh();
+    navigator.mediaDevices?.addEventListener?.('devicechange', refresh);
+    return () => navigator.mediaDevices?.removeEventListener?.('devicechange', refresh);
+  }, []);
+
+  // Auto-reconnect support (server may be waking up, or a phone may change network)
+  const reconnectTimerRef = useRef<number | null>(null);
+  const retryCountRef = useRef<number>(0);
+  const unmountedRef = useRef<boolean>(false);
+  const connectRef = useRef<() => void>(() => {});
+
+  const scheduleRetry = useCallback(() => {
+    if (unmountedRef.current) return;
+    if (reconnectTimerRef.current) window.clearTimeout(reconnectTimerRef.current);
+    const delay = Math.min(1500 * Math.pow(1.6, retryCountRef.current), 10000);
+    retryCountRef.current += 1;
+    reconnectTimerRef.current = window.setTimeout(() => {
+      reconnectTimerRef.current = null;
+      connectRef.current();
+    }, delay);
+  }, []);
+
   // Connect to backend WebSocket / token route
   const connectWebSocket = useCallback(async () => {
+    // Avoid duplicate connections
+    if (wsRef.current && (wsRef.current.readyState === WebSocket.OPEN || wsRef.current.readyState === WebSocket.CONNECTING)) {
+      return;
+    }
     try {
-      // Use dev proxy / relative token endpoint or fallback to local
-      const tokenUrl = window.location.port === '3000'
-        ? 'http://127.0.0.1:5000/v1/token'
-        : '/v1/token';
-
-      const res = await fetch(tokenUrl, {
+      // Always use same-origin URLs: in dev, Vite proxies /v1 to the backend;
+      // in production the backend serves this app, so the paths just work.
+      const res = await fetch('/v1/token', {
         headers: { 'Authorization': 'Bearer dev-token-bypass' }
       });
 
       if (!res.ok) throw new Error(`Token fetch failed (${res.status})`);
       const tokenData = await res.json();
-      const baseWs = tokenData.ws_url || `ws://127.0.0.1:5000/v1/ws?token=${tokenData.token}`;
-      const wsUrl = baseWs.includes('session_id=')
-        ? baseWs
-        : `${baseWs}${baseWs.includes('?') ? '&' : '?'}session_id=${encodeURIComponent(sessionId)}`;
+      const wsProto = window.location.protocol === 'https:' ? 'wss' : 'ws';
+      const baseWs = `${wsProto}://${window.location.host}/v1/ws?token=${encodeURIComponent(tokenData.token || '')}`;
+      const wsUrl = `${baseWs}&session_id=${encodeURIComponent(sessionId)}`;
 
       const ws = new WebSocket(wsUrl);
       wsRef.current = ws;
 
       ws.onopen = () => {
+        retryCountRef.current = 0;
         setIsConnected(true);
+        setErrorDetail(undefined);
         setVoiceState('ready');
       };
 
@@ -289,23 +330,54 @@ export function useVoiceSession(): [VoiceSessionState, VoiceSessionEvents] {
         }
       };
 
-      ws.onclose = () => {
+      ws.onclose = (ev) => {
+        if (wsRef.current !== ws) return; // a newer connection replaced this one
         setIsConnected(false);
+        setErrorDetail(`Connection closed (code ${ev.code}). Retrying...`);
+        scheduleRetry();
       };
 
       ws.onerror = () => {
+        if (wsRef.current !== ws) return;
         setIsConnected(false);
       };
-    } catch {
-      // Backend is offline or unreachable; fallback to standalone offline mode
+    } catch (err: any) {
+      // Backend is offline, asleep, or unreachable: retry automatically
       setIsConnected(false);
+      setErrorDetail(`${err?.message || 'Cannot reach server'}. Retrying...`);
+      scheduleRetry();
     }
-  }, [addTranscript, sessionId, teardownCapture]);
+  }, [addTranscript, sessionId, teardownCapture, scheduleRetry]);
 
-  // Try initial backend connection once on mount
+  // Keep a ref to the latest connect function for the retry timer
   useEffect(() => {
-    connectWebSocket();
+    connectRef.current = connectWebSocket;
   }, [connectWebSocket]);
+
+  // Initial connection on mount, plus reconnect when the phone wakes up or regains network
+  useEffect(() => {
+    unmountedRef.current = false;
+    connectWebSocket();
+
+    const reconnectNow = () => {
+      if (unmountedRef.current) return;
+      if (!wsRef.current || wsRef.current.readyState === WebSocket.CLOSED || wsRef.current.readyState === WebSocket.CLOSING) {
+        retryCountRef.current = 0;
+        connectRef.current();
+      }
+    };
+    const onVisible = () => { if (document.visibilityState === 'visible') reconnectNow(); };
+    window.addEventListener('online', reconnectNow);
+    document.addEventListener('visibilitychange', onVisible);
+
+    return () => {
+      unmountedRef.current = true;
+      if (reconnectTimerRef.current) window.clearTimeout(reconnectTimerRef.current);
+      window.removeEventListener('online', reconnectNow);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Start listening (Tap to speak)
   const startListening = useCallback(async () => {
@@ -317,20 +389,35 @@ export function useVoiceSession(): [VoiceSessionState, VoiceSessionEvents] {
       await audioManagerRef.current?.init();
       if (!mediaStreamRef.current) {
         mediaStreamRef.current = await navigator.mediaDevices.getUserMedia({
-          audio: { sampleRate: 24000, echoCancellation: true, noiseSuppression: true }
+          audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
         });
       }
+      refreshHeadsetRef.current();
       await setupCapture(mediaStreamRef.current);
       setVoiceState('listening');
       setPartialUserText('');
       setCurrentCaption('Listening to your voice...');
       setErrorDetail(undefined);
     } catch (e: any) {
+      teardownCapture();
+      const name = e?.name || '';
+      let friendly = 'Could not start the microphone.';
+      if (name === 'NotAllowedError' || name === 'SecurityError') {
+        friendly = 'Microphone blocked. Allow microphone access in your browser settings, then tap to retry.';
+      } else if (name === 'NotFoundError' || name === 'OverconstrainedError') {
+        friendly = 'No microphone found on this device.';
+      } else if (name === 'NotReadableError') {
+        friendly = 'Microphone is being used by another app. Close it and tap to retry.';
+      } else if (!window.isSecureContext) {
+        friendly = 'Microphone needs a secure (https) connection.';
+      } else if (e?.message) {
+        friendly = `Microphone error: ${e.message}`;
+      }
       setVoiceState('microphone_error');
-      setErrorDetail(e?.message || 'Microphone access denied or hardware unavailable.');
-      setCurrentCaption('Microphone permission required. Tap to retry.');
+      setErrorDetail(`${name ? name + ': ' : ''}${e?.message || friendly}`);
+      setCurrentCaption(friendly);
     }
-  }, [setupCapture]);
+  }, [setupCapture, teardownCapture]);
 
   // Stop listening / finalize turn
   const stopListening = useCallback(() => {
@@ -525,7 +612,7 @@ export function useVoiceSession(): [VoiceSessionState, VoiceSessionEvents] {
     variant: semanticVariant,
     isConnected,
     isMicMuted,
-    hasHeadset: true,
+    hasHeadset,
     isPttActive: true,
     batteryLevel: 98,
     siteContext: {
