@@ -4,7 +4,8 @@ INT-001/002/003/004: Database Interface & Read Models for Supervisor Web Dashboa
 
 import uuid
 import sqlite3
-from datetime import datetime
+import json
+from datetime import datetime, timezone
 from abc import ABC, abstractmethod
 from typing import Optional, Any
 from dataclasses import dataclass
@@ -36,6 +37,7 @@ class SQLiteDatabase(DatabaseInterface):
         config = get_config()
         self.db_path = db_path or "aura.db"
         self._init_db()
+        self._seed_data_if_empty()
 
     def _init_db(self):
         conn = sqlite3.connect(self.db_path)
@@ -96,9 +98,131 @@ class SQLiteDatabase(DatabaseInterface):
         conn.commit()
         conn.close()
 
+    def _seed_data_if_empty(self):
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+
+        cursor.execute("SELECT COUNT(*) FROM reports")
+        report_count = cursor.fetchone()[0]
+
+        if report_count == 0:
+            seed_reports = [
+                {
+                    "id": "rep_seed_001",
+                    "location": "Warehouse 03 - Bay 7",
+                    "equipment": "Coolant Pump Line CP-2",
+                    "hazard_type": "Pressure spike / line fatigue",
+                    "injury": "No injury (near miss)",
+                    "narrative": "Worker observed line pressure spiking to 15 PSI during flush. Closed isolation valve before relief valve ruptured.",
+                    "status": "awaiting_review",
+                    "provenance": json.dumps({
+                        "location": {"source": "said", "value": "Warehouse 03 - Bay 7"},
+                        "equipment": {"source": "said", "value": "Coolant Pump Line CP-2"},
+                        "hazard_type": {"source": "inferred", "value": "Pressure spike / line fatigue"},
+                        "injury": {"source": "confirmed", "value": "No injury (near miss)"}
+                    }),
+                    "idempotency_key": "seed_key_001",
+                    "worker_id": "worker_01",
+                    "created_at": datetime.now(timezone.utc).isoformat(),
+                    "pattern_detected": 1,
+                    "recurrence_sentence": "3rd pressure anomaly on CP-2 line in 14 days."
+                },
+                {
+                    "id": "rep_seed_002",
+                    "location": "Substation B - Cell 4",
+                    "equipment": "Transformer Line T-101",
+                    "hazard_type": "Thermal threshold warning",
+                    "injury": "None",
+                    "narrative": "Temperature reading reached 185 F during routine maintenance check. Vent cleared and load reduced.",
+                    "status": "approved",
+                    "provenance": json.dumps({
+                        "location": {"source": "said", "value": "Substation B - Cell 4"},
+                        "equipment": {"source": "said", "value": "Transformer Line T-101"},
+                        "hazard_type": {"source": "inferred", "value": "Thermal threshold warning"}
+                    }),
+                    "idempotency_key": "seed_key_002",
+                    "worker_id": "worker_02",
+                    "created_at": datetime.now(timezone.utc).isoformat(),
+                    "pattern_detected": 0,
+                    "recurrence_sentence": ""
+                },
+                {
+                    "id": "rep_seed_003",
+                    "location": "Assembly Floor - Station 12",
+                    "equipment": "Hydraulic Arm HA-04",
+                    "hazard_type": "Fluid leak near power pack",
+                    "injury": "Slip risk averted",
+                    "narrative": "Minor hydraulic oil weeping onto catwalk near HA-04 manifold. Spill kit applied.",
+                    "status": "awaiting_review",
+                    "provenance": json.dumps({
+                        "location": {"source": "said", "value": "Assembly Floor - Station 12"},
+                        "equipment": {"source": "said", "value": "Hydraulic Arm HA-04"}
+                    }),
+                    "idempotency_key": "seed_key_003",
+                    "worker_id": "worker_03",
+                    "created_at": datetime.now(timezone.utc).isoformat(),
+                    "pattern_detected": 1,
+                    "recurrence_sentence": "2nd fluid leak reported on HA-04."
+                }
+            ]
+
+            for r in seed_reports:
+                cursor.execute(
+                    """INSERT INTO reports
+                       (id, location, equipment, hazard_type, injury, narrative, status,
+                        provenance, idempotency_key, worker_id, created_at, pattern_detected, recurrence_sentence)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (
+                        r["id"], r["location"], r["equipment"], r["hazard_type"], r["injury"],
+                        r["narrative"], r["status"], r["provenance"], r["idempotency_key"],
+                        r["worker_id"], r["created_at"], r["pattern_detected"], r["recurrence_sentence"]
+                    )
+                )
+
+            # Seed corrective action for rep_seed_001
+            cursor.execute(
+                """INSERT INTO corrective_actions
+                   (id, report_id, pattern_signal, proposed_action, supervisor_review_required, status, created_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    "ca_seed_001",
+                    "rep_seed_001",
+                    json.dumps({"recurring": True, "count": 3, "sentence": "3rd pressure anomaly on CP-2 line in 14 days."}),
+                    "Replace pressure relief valve PRV-12 and inspect line CP-2 for micro-fractures.",
+                    1,
+                    "pending_supervisor",
+                    datetime.now(timezone.utc).isoformat()
+                )
+            )
+
+        cursor.execute("SELECT COUNT(*) FROM maintenance_entries")
+        maint_count = cursor.fetchone()[0]
+
+        if maint_count == 0:
+            cursor.execute(
+                """INSERT INTO maintenance_entries
+                   (id, location, equipment, issue_description, severity, provenance, worker_id, created_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    "maint_seed_001",
+                    "Warehouse 03 - Bay 7",
+                    "Coolant Pump Line CP-2",
+                    "Inspected valve seals and replaced secondary pressure gauge PRV-02.",
+                    "medium",
+                    json.dumps({"equipment": {"source": "said", "value": "Coolant Pump Line CP-2"}}),
+                    "worker_01",
+                    datetime.now(timezone.utc).isoformat()
+                )
+            )
+
+        conn.commit()
+        conn.close()
+
     def create_maintenance_entry(self, data: dict) -> str:
         entry_id = str(uuid.uuid4())
         conn = sqlite3.connect(self.db_path)
+        prov = data.get("provenance", {})
+        prov_str = prov if isinstance(prov, str) else json.dumps(prov)
         conn.execute(
             """INSERT INTO maintenance_entries
                (id, location, equipment, issue_description, severity, provenance, worker_id, created_at)
@@ -109,9 +233,9 @@ class SQLiteDatabase(DatabaseInterface):
                 data.get("equipment", "Unknown"),
                 data.get("issue_description", ""),
                 data.get("severity", "medium"),
-                str(data.get("provenance", {})),
+                prov_str,
                 data.get("worker_id", ""),
-                datetime.utcnow().isoformat(),
+                datetime.now(timezone.utc).isoformat(),
             ),
         )
         conn.commit()
@@ -121,6 +245,8 @@ class SQLiteDatabase(DatabaseInterface):
     def create_report(self, data: dict) -> str:
         report_id = str(uuid.uuid4())
         conn = sqlite3.connect(self.db_path)
+        prov = data.get("provenance", {})
+        prov_str = prov if isinstance(prov, str) else json.dumps(prov)
         conn.execute(
             """INSERT INTO reports
                (id, location, equipment, hazard_type, injury, narrative, status,
@@ -134,10 +260,10 @@ class SQLiteDatabase(DatabaseInterface):
                 data.get("injury", ""),
                 data.get("narrative", ""),
                 data.get("status", "awaiting_review"),
-                str(data.get("provenance", {})),
+                prov_str,
                 data.get("idempotency_key", ""),
                 data.get("worker_id", ""),
-                datetime.utcnow().isoformat(),
+                datetime.now(timezone.utc).isoformat(),
                 1 if data.get("pattern_detected") else 0,
                 data.get("recurrence_sentence", ""),
             ),
@@ -175,7 +301,7 @@ class SQLiteDatabase(DatabaseInterface):
                 data.get("deviation_percentage"),
                 str(data.get("required_acknowledgments", [])),
                 data.get("sender_id", ""),
-                datetime.utcnow().isoformat(),
+                datetime.now(timezone.utc).isoformat(),
             ),
         )
         conn.commit()
@@ -197,7 +323,7 @@ class SQLiteDatabase(DatabaseInterface):
                 data.get("proposed_action", ""),
                 1 if data.get("supervisor_review_required", True) else 0,
                 data.get("status", "pending_supervisor"),
-                datetime.utcnow().isoformat(),
+                datetime.now(timezone.utc).isoformat(),
             ),
         )
         conn.commit()

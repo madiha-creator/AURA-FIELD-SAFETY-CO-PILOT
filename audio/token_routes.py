@@ -5,7 +5,7 @@ GET /v1/token - Authenticated route that mints short-lived session tokens
 for the frontend to connect to AssemblyAI Voice Agent WebSocket (or local mock agent).
 
 Security policy:
-- Must NOT accept arbitrary Bearer tokens unless valid JWT or explicitly allowed in dev bypass.
+- Must NOT accept arbitrary Bearer tokens unless valid JWT or explicitly allowed in dev bypass when ENV=development.
 - Verifies JWT signature & expiration using JWT_SECRET.
 - Extracts sub / user_id onto request.user_id.
 - Never logs raw tokens or API keys in audit logs or responses.
@@ -36,10 +36,13 @@ def require_bearer_auth(f):
         if not token:
             return jsonify({"error": "Empty Bearer token"}), 401
 
-        # Check for development bypass if ENV=development
+        # Dev bypass ONLY allowed if ENV is development
         if config.ENV == "development" and token == "dev-token-bypass":
             request.user_id = "dev_worker"
             return f(*args, **kwargs)
+
+        if config.ENV == "production" and token == "dev-token-bypass":
+            return jsonify({"error": "Unauthorized: dev-token-bypass is disabled in production"}), 401
 
         # Real JWT Verification with JWT_SECRET
         try:
@@ -104,7 +107,10 @@ def register_token_routes(app: Flask):
         user_id = getattr(request, "user_id", "unknown_user")
 
         if not config.ASSEMBLYAI_API_KEY:
-            # Fallback for local development/demo mode when API key is missing
+            if config.ENV == "production":
+                return jsonify({"error": "Voice service unavailable: ASSEMBLYAI_API_KEY is not configured"}), 503
+
+            # Mock fallback for development environment only
             mock_token = f"mock_token_{secrets.token_hex(8)}"
             audit_logger.log_action(
                 user_id=user_id,
@@ -135,7 +141,10 @@ def register_token_routes(app: Flask):
                 action="token_issuance_failed",
                 metadata={"error": "AssemblyAI minting error"},
             )
-            # Safe local fallback even if external AssemblyAI fails
+            if config.ENV == "production":
+                return jsonify({"error": "Failed to issue voice token from AssemblyAI upstream"}), 502
+
+            # Safe local fallback for dev environment
             mock_token = f"mock_token_{secrets.token_hex(8)}"
             return jsonify({
                 "token": mock_token,

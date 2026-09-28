@@ -1,5 +1,6 @@
 [
   {
+    "type": "function",
     "name": "check_safety_status",
     "description": "Check worker safety status and hazard exposure before allowing near-miss report collection.",
     "parameters": {
@@ -16,6 +17,7 @@
     }
   },
   {
+    "type": "function",
     "name": "check_safety_threshold",
     "description": "Check spoken numeric reading against known safety thresholds for parameters.",
     "parameters": {
@@ -38,6 +40,7 @@
     }
   },
   {
+    "type": "function",
     "name": "query_manual_db",
     "description": "Query technical manual DB for procedure instructions and safe parameter ranges.",
     "parameters": {
@@ -51,6 +54,7 @@
     }
   },
   {
+    "type": "function",
     "name": "get_next_step",
     "description": "Get next procedure step after worker explicit confirmation of current step.",
     "parameters": {
@@ -63,6 +67,7 @@
     }
   },
   {
+    "type": "function",
     "name": "log_maintenance_entry",
     "description": "Log structured maintenance entry for a component after confirmation.",
     "parameters": {
@@ -79,6 +84,7 @@
     }
   },
   {
+    "type": "function",
     "name": "get_missing_fields",
     "description": "Check current report schema state and return missing fields with follow-up questions.",
     "parameters": {
@@ -90,6 +96,7 @@
     }
   },
   {
+    "type": "function",
     "name": "search_similar_reports",
     "description": "Search historical reports for pattern matching and recurring signals.",
     "parameters": {
@@ -109,6 +116,7 @@
     }
   },
   {
+    "type": "function",
     "name": "create_near_miss",
     "description": "Create a confirmed near-miss report requiring worker confirmation and safe status.",
     "parameters": {
@@ -133,6 +141,7 @@
     }
   },
   {
+    "type": "function",
     "name": "notify_safety_contact",
     "description": "Route safety notification to site contact roles.",
     "parameters": {
@@ -151,6 +160,7 @@
     }
   },
   {
+    "type": "function",
     "name": "draft_corrective_action",
     "description": "Generate a pending corrective action draft for supervisor review.",
     "parameters": {

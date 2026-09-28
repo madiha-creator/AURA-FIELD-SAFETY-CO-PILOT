@@ -19,6 +19,7 @@ class Config:
     JWT_SECRET: str = os.environ.get("JWT_SECRET", "aura-dev-jwt-secret")
     ENV: str = os.environ.get("ENV", os.environ.get("FLASK_ENV", "development"))
     FRONTEND_ORIGIN: str = os.environ.get("FRONTEND_ORIGIN", "http://localhost:5173")
+    SLACK_WEBHOOK_URL: str = os.environ.get("SLACK_WEBHOOK_URL", "")
     DATABASE_URL: str = os.environ.get("DATABASE_URL", "sqlite:///aura.db")
     REDIS_URL: str = os.environ.get("REDIS_URL", "")
     TOKEN_EXPIRY_SECONDS: int = int(os.environ.get("TOKEN_EXPIRY_SECONDS", "300"))
@@ -31,8 +32,11 @@ class Config:
 
     def validate(self) -> list[str]:
         errors = []
-        if not self.ASSEMBLYAI_API_KEY:
-            errors.append("ASSEMBLYAI_API_KEY is not set")
+        if self.ENV == "production":
+            if not self.JWT_SECRET or self.JWT_SECRET == "aura-dev-jwt-secret":
+                errors.append("JWT_SECRET must be set to a secure custom secret in production")
+            if not self.ASSEMBLYAI_API_KEY:
+                errors.append("ASSEMBLYAI_API_KEY is required in production")
         return errors
 
 
