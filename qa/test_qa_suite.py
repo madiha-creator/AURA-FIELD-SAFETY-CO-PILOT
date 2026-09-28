@@ -5,6 +5,7 @@ Runs behavioral tests against state manager, tool dispatcher, confirmation gate,
 
 import os
 import time
+import json
 import unittest
 import jwt
 from datetime import datetime, timedelta, timezone
@@ -12,6 +13,7 @@ import integrations.database as db_module
 from backend.state_manager import StateManager, SessionMode, ProvenanceSource, ConfirmationStatus, InMemoryStateBackend
 from backend.audit_logger import AuditLogger
 from backend.tool_dispatcher import ToolDispatcher, compute_idempotency_key
+from backend.config import Config, get_config
 
 
 class TestQA001to004(unittest.TestCase):
@@ -40,11 +42,9 @@ class TestQA001to004(unittest.TestCase):
         state = self.state_manager.create_session(user_id=worker_id, session_id=session_id)
         self.state_manager.set_mode(session_id, SessionMode.REPORTING)
 
-        # Initial fields filled
         self.state_manager.update_report_field(session_id, "location", "Bay 2", ProvenanceSource.SAID)
         self.state_manager.update_report_field(session_id, "equipment", "Valve 2", ProvenanceSource.INFERRED)
 
-        # Worker correction action: "no, it was valve 4 not valve 2"
         self.state_manager.correct_report_field(session_id, "equipment", "Valve 4", ProvenanceSource.SAID)
 
         state_after = self.state_manager.get_state(session_id)
@@ -52,12 +52,10 @@ class TestQA001to004(unittest.TestCase):
         self.assertEqual(state_after.report.equipment.value, "Valve 4")
         self.assertEqual(state_after.report.equipment.source, ProvenanceSource.SAID)
 
-        # Audit log automatically contains correction event from state_manager
         history = self.audit_logger.get_session_history(session_id)
         corrected_logs = [h for h in history if h["action"] == "field_corrected"]
         self.assertEqual(len(corrected_logs), 1)
 
-        # Verify no create_near_miss tool execution occurred
         create_logs = [h for h in history if h["action"] == "tool_executed" and "create_near_miss" in str(h["metadata"])]
         self.assertEqual(len(create_logs), 0)
 
@@ -69,10 +67,8 @@ class TestQA001to004(unittest.TestCase):
         state.current_step = 2
         self.state_manager.update_state(state)
 
-        # Barge-in action: "my gauge reads 15 PSI, is that safe?"
         self.dispatcher.handle_interruption(session_id, "call_step2_audio")
 
-        # Call check_safety_threshold
         result = self.dispatcher.execute("check_safety_threshold", {
             "session_id": session_id,
             "parameter": "pressure",
@@ -85,7 +81,6 @@ class TestQA001to004(unittest.TestCase):
         self.assertEqual(result["severity"], "critical")
         self.assertIn("WARNING", result["message"])
 
-        # State check: step remains 2, get_next_step was NOT called
         state_after = self.state_manager.get_state(session_id)
         self.assertEqual(state_after.current_step, 2)
 
@@ -93,7 +88,6 @@ class TestQA001to004(unittest.TestCase):
         session_id = "test_qa003"
         worker_id = "worker_01"
 
-        # "pressure is 15 PSI"
         result = self.dispatcher.execute("check_safety_threshold", {
             "session_id": session_id,
             "parameter": "coolant line pressure",
@@ -106,7 +100,6 @@ class TestQA001to004(unittest.TestCase):
         self.assertEqual(result["deviation_pct"], 83.3)
         self.assertEqual(result["severity"], "critical")
 
-        # check_safety_status gates reporting when exposed
         status_res = self.dispatcher.execute("check_safety_status", {
             "session_id": session_id,
             "mode": "reporting",
@@ -125,7 +118,6 @@ class TestQA001to004(unittest.TestCase):
         self.state_manager.update_report_field(session_id, "location", "Site Bay 1", ProvenanceSource.SAID)
         self.state_manager.update_report_field(session_id, "equipment", "Compressor A", ProvenanceSource.SAID)
 
-        # Stable idempotency key computation
         key = compute_idempotency_key(
             worker_id=worker_id,
             site="Site Bay 1",
@@ -134,7 +126,6 @@ class TestQA001to004(unittest.TestCase):
             local_day="2026-03-30"
         )
 
-        # Safety status must be verified before create_near_miss is allowed
         status_res = self.dispatcher.execute("check_safety_status", {
             "session_id": session_id,
             "mode": "reporting",
@@ -143,11 +134,9 @@ class TestQA001to004(unittest.TestCase):
         })
         self.assertTrue(status_res["safe_to_report"])
 
-        # Confirm gate satisfied
         state.confirmation_status = ConfirmationStatus.CONFIRMED
         self.state_manager.update_state(state)
 
-        # Create report call 1
         res1 = self.dispatcher.execute("create_near_miss", {
             "session_id": session_id,
             "worker_id": worker_id,
@@ -164,12 +153,10 @@ class TestQA001to004(unittest.TestCase):
         self.assertTrue(res1["created"])
         self.assertFalse(res1["duplicate"])
 
-        # Reconnect within 30s window (simulated immediately / t=20s): state restored
         resumed_state = self.state_manager.get_state(session_id)
         self.assertIsNotNone(resumed_state)
         self.assertEqual(resumed_state.mode, SessionMode.REPORTING)
 
-        # Replaying create_near_miss with same idempotency key returns created: false, duplicate: true
         resumed_state.confirmation_status = ConfirmationStatus.CONFIRMED
         self.state_manager.update_state(resumed_state)
         res2 = self.dispatcher.execute("create_near_miss", {
@@ -189,25 +176,20 @@ class TestQA001to004(unittest.TestCase):
         self.assertTrue(res2["duplicate"])
         self.assertEqual(res1["report_id"], res2["report_id"])
 
-        # Reconnect at t > 30s (e.g. simulate expiration): session expires, get_state returns None
         self.state_backend._store[session_id] = (resumed_state, time.time() - 35)
         expired_state = self.state_manager.get_state(session_id)
         self.assertIsNone(expired_state)
 
     def test_qa_005_token_route_and_mock_session(self):
-        """Test JWT validation / dev bypass token route and mock session initialization."""
         import backend.app as flask_app
         client = flask_app.app.test_client()
 
-        # Reject request without Bearer token
         res_no_auth = client.get("/v1/token")
         self.assertEqual(res_no_auth.status_code, 401)
 
-        # Reject request with invalid JWT in non-dev mode
         res_invalid = client.get("/v1/token", headers={"Authorization": "Bearer invalid_jwt_token"})
         self.assertEqual(res_invalid.status_code, 401)
 
-        # Accept dev bypass token
         res_dev = client.get("/v1/token", headers={"Authorization": "Bearer dev-token-bypass"})
         self.assertEqual(res_dev.status_code, 200)
         data = res_dev.get_json()
@@ -215,23 +197,19 @@ class TestQA001to004(unittest.TestCase):
         self.assertIn("ws_url", data)
 
     def test_qa_006_auth_and_401_paths(self):
-        """Test authentication 401 paths and valid JWT verification for supervisor APIs."""
         import backend.app as flask_app
         client = flask_app.app.test_client()
 
         jwt_secret = "aura-dev-jwt-secret"
 
-        # 1. 401 on missing Authorization header
         res_reviews_no_auth = client.get("/api/reviews")
         self.assertEqual(res_reviews_no_auth.status_code, 401)
         self.assertIn("Missing or invalid Authorization header", res_reviews_no_auth.get_json()["error"])
 
-        # 2. 401 on invalid JWT signature
         bad_token = jwt.encode({"sub": "attacker"}, "wrong-secret", algorithm="HS256")
         res_bad_token = client.get("/api/reviews", headers={"Authorization": f"Bearer {bad_token}"})
         self.assertEqual(res_bad_token.status_code, 401)
 
-        # 3. 401 on expired JWT
         expired_payload = {
             "sub": "supervisor_john",
             "exp": datetime.now(timezone.utc) - timedelta(seconds=10)
@@ -241,7 +219,6 @@ class TestQA001to004(unittest.TestCase):
         self.assertEqual(res_expired.status_code, 401)
         self.assertIn("expired", res_expired.get_json()["error"])
 
-        # 4. 200 on valid JWT
         valid_payload = {
             "sub": "supervisor_john",
             "exp": datetime.now(timezone.utc) + timedelta(minutes=5)
@@ -251,66 +228,142 @@ class TestQA001to004(unittest.TestCase):
         self.assertEqual(res_valid.status_code, 200)
         self.assertIn("reviews", res_valid.get_json())
 
-
     def test_qa_007_confirmation_flow_end_to_end(self):
-            """Verify the confirmation gate stores/replays/clears the pending write end-to-end."""
-            session_id = "test_qa007"
-            worker_id = "worker_01"
-            self.state_manager.create_session(user_id=worker_id, session_id=session_id)
-    
-            # (a) request_confirmation stores pending_action + pending_payload on state
-            payload = {
-                "report": {
-                    "location": "Site Bay 1",
-                    "equipment": "Compressor A",
-                    "hazard_type": "Fluid Leak",
-                    "injury": "None",
-                    "narrative": "Oil leaking near high pressure valve"
-                }
+        session_id = "test_qa007"
+        worker_id = "worker_01"
+        self.state_manager.create_session(user_id=worker_id, session_id=session_id)
+
+        payload = {
+            "report": {
+                "location": "Site Bay 1",
+                "equipment": "Compressor A",
+                "hazard_type": "Fluid Leak",
+                "injury": "None",
+                "narrative": "Oil leaking near high pressure valve"
             }
-            from backend.confirmation_gate import WriteAction
-            result = self.dispatcher.confirmation_gate.request_confirmation(
-                action=WriteAction.CREATE_NEAR_MISS,
-                payload=payload,
-                session_id=session_id,
-                user_id=worker_id,
-            )
-            self.assertTrue(result["confirmation_required"])
-    
-            state = self.state_manager.get_state(session_id)
-            self.assertEqual(state.pending_action, WriteAction.CREATE_NEAR_MISS.value)
-            self.assertEqual(state.pending_payload, payload)
-    
-            # (b) verify_confirmation(confirmed=True) returns (True, payload) and clears both fields
-            ok, returned_payload = self.dispatcher.confirmation_gate.verify_confirmation(
-                session_id=session_id, user_id=worker_id, confirmed=True
-            )
-            self.assertTrue(ok)
-            self.assertEqual(returned_payload, payload)
-    
-            state = self.state_manager.get_state(session_id)
-            self.assertIsNone(state.pending_action)
-            self.assertIsNone(state.pending_payload)
-            self.assertEqual(state.confirmation_status, ConfirmationStatus.CONFIRMED)
-    
-            # (c) verify_confirmation(confirmed=False) returns (False, None) and clears both fields
-            self.dispatcher.confirmation_gate.request_confirmation(
-                action=WriteAction.CREATE_NEAR_MISS,
-                payload=payload,
-                session_id=session_id,
-                user_id=worker_id,
-            )
-            ok, returned_payload = self.dispatcher.confirmation_gate.verify_confirmation(
-                session_id=session_id, user_id=worker_id, confirmed=False
-            )
-            self.assertFalse(ok)
-            self.assertIsNone(returned_payload)
-    
-            state = self.state_manager.get_state(session_id)
-            self.assertIsNone(state.pending_action)
-            self.assertIsNone(state.pending_payload)
-            self.assertEqual(state.confirmation_status, ConfirmationStatus.REJECTED)
-    
+        }
+        from backend.confirmation_gate import WriteAction
+        result = self.dispatcher.confirmation_gate.request_confirmation(
+            action=WriteAction.CREATE_NEAR_MISS,
+            payload=payload,
+            session_id=session_id,
+            user_id=worker_id,
+        )
+        self.assertTrue(result["confirmation_required"])
+
+        state = self.state_manager.get_state(session_id)
+        self.assertEqual(state.pending_action, WriteAction.CREATE_NEAR_MISS.value)
+        self.assertEqual(state.pending_payload, payload)
+
+        ok, returned_payload = self.dispatcher.confirmation_gate.verify_confirmation(
+            session_id=session_id, user_id=worker_id, confirmed=True
+        )
+        self.assertTrue(ok)
+        self.assertEqual(returned_payload, payload)
+
+        state = self.state_manager.get_state(session_id)
+        self.assertIsNone(state.pending_action)
+        self.assertIsNone(state.pending_payload)
+        self.assertEqual(state.confirmation_status, ConfirmationStatus.CONFIRMED)
+
+        self.dispatcher.confirmation_gate.request_confirmation(
+            action=WriteAction.CREATE_NEAR_MISS,
+            payload=payload,
+            session_id=session_id,
+            user_id=worker_id,
+        )
+        ok, returned_payload = self.dispatcher.confirmation_gate.verify_confirmation(
+            session_id=session_id, user_id=worker_id, confirmed=False
+        )
+        self.assertFalse(ok)
+        self.assertIsNone(returned_payload)
+
+        state = self.state_manager.get_state(session_id)
+        self.assertIsNone(state.pending_action)
+        self.assertIsNone(state.pending_payload)
+        self.assertEqual(state.confirmation_status, ConfirmationStatus.REJECTED)
+
+    def test_qa_008_production_refuses_dev_token_bypass(self):
+        import backend.app as flask_app
+        import backend.config as config_mod
+
+        old_env = config_mod.config.ENV
+        try:
+            config_mod.config.ENV = "production"
+            client = flask_app.app.test_client()
+
+            res = client.get("/v1/token", headers={"Authorization": "Bearer dev-token-bypass"})
+            self.assertEqual(res.status_code, 401)
+            self.assertIn("disabled in production", res.get_json()["error"])
+        finally:
+            config_mod.config.ENV = old_env
+
+    def test_qa_009_tool_schema_type_function(self):
+        schema_path = "packages/contracts/tools.schema.json"
+        self.assertTrue(os.path.exists(schema_path))
+        with open(schema_path, "r") as f:
+            tools = json.load(f)
+        self.assertGreater(len(tools), 0)
+        for t in tools:
+            self.assertIn("type", t)
+            self.assertEqual(t["type"], "function")
+            self.assertIn("name", t)
+            self.assertIn("description", t)
+            self.assertIn("parameters", t)
+
+    def test_qa_010_check_safety_status_blocks_create(self):
+        session_id = "test_qa010"
+        worker_id = "worker_01"
+        state = self.state_manager.create_session(user_id=worker_id, session_id=session_id)
+        state.confirmation_status = ConfirmationStatus.CONFIRMED
+
+        # Mark safety status as NOT safe
+        state.last_safety_status = {
+            "safe_to_report": False,
+            "reason": "Active pressure spike hazard present"
+        }
+        self.state_manager.update_state(state)
+
+        res = self.dispatcher.execute("create_near_miss", {
+            "session_id": session_id,
+            "worker_id": worker_id,
+            "idempotency_key": "key_010",
+            "report": {
+                "location": "Bay 1",
+                "equipment": "Pump 1",
+                "hazard_type": "Pressure",
+                "injury": "None",
+                "narrative": "Spike"
+            }
+        })
+        self.assertIn("error", res)
+        self.assertFalse(res.get("safe_to_report", True))
+
+    def test_qa_011_confirmation_gate_blocks_silent_write(self):
+        session_id = "test_qa011"
+        worker_id = "worker_01"
+        state = self.state_manager.create_session(user_id=worker_id, session_id=session_id)
+        state.confirmation_status = ConfirmationStatus.NOT_REQUIRED
+        state.last_safety_status = {"safe_to_report": True}
+        self.state_manager.update_state(state)
+
+        res = self.dispatcher.execute("create_near_miss", {
+            "session_id": session_id,
+            "worker_id": worker_id,
+            "idempotency_key": "key_011",
+            "report": {
+                "location": "Bay 1",
+                "equipment": "Pump 1",
+                "hazard_type": "Pressure",
+                "injury": "None",
+                "narrative": "Spike"
+            }
+        })
+        self.assertTrue(res.get("confirmation_required"))
+        self.assertEqual(self.db.get_reports_list(), [
+            r for r in self.db.get_reports_list() if r["idempotency_key"] != "key_011"
+        ])
+
 
 if __name__ == "__main__":
     unittest.main()

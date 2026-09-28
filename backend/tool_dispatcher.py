@@ -5,6 +5,7 @@ BE-003 & INT-001..004 & SAF-001..004 & DAT-001..005: Tool Dispatcher integrated 
 import hashlib
 import json
 import os
+import requests
 from datetime import datetime, date
 from typing import Any, Optional
 
@@ -13,6 +14,7 @@ from backend.state_manager import (
 )
 from backend.confirmation_gate import ConfirmationGate, WriteAction
 from backend.audit_logger import AuditLogger, AuditAction
+from backend.config import get_config
 from integrations.database import get_database
 
 from safety.threshold import check_safety_threshold as saf_check_safety_threshold
@@ -43,6 +45,7 @@ class ToolDispatcher:
         self.audit_logger = audit_logger
         self.confirmation_gate = ConfirmationGate(state_manager, audit_logger)
         self.db = get_database()
+        self.config = get_config()
 
     def handle_interruption(self, session_id: str, tool_call_id: str) -> None:
         state = self.state_manager.get_state(session_id)
@@ -128,12 +131,10 @@ class ToolDispatcher:
             current_step = int(arguments.get("current_step", 1))
             next_step = current_step + 1
 
-            # Fetch step text from data manuals/index if available
             manual_res = dat_query_manual_db(procedure=procedure, step=next_step)
             step_text = manual_res.get("step_text")
 
             if not step_text:
-                # Fallback procedure step generator if exact step is beyond manual length
                 if current_step >= 4:
                     return {
                         "next_step_id": None,
@@ -275,41 +276,77 @@ class ToolDispatcher:
 
         # 9. notify_safety_contact (Write tool)
         elif tool_name == "notify_safety_contact":
-            classification = saf_classify_action("notify_safety_contact", context=arguments)
-            if not classification.get("allowed", True):
-                return {"error": "Cannot notify safety contact without a valid report_id."}
-
-            if state and state.confirmation_status != ConfirmationStatus.CONFIRMED:
-                return self.confirmation_gate.request_confirmation(
-                    action=WriteAction.NOTIFY_SAFETY_CONTACT,
-                    payload=arguments,
-                    session_id=session_id,
-                    user_id=worker_id,
-                )
             report_id = arguments.get("report_id")
             policy = arguments.get("site_policy", {})
             roles = policy.get("auto_notify_roles", ["safety_officer"])
-            channel = policy.get("channel", "email/sms")
+            channel = policy.get("channel", "slack/email")
+
+            webhook_url = self.config.SLACK_WEBHOOK_URL
+            notified = False
+            reason = None
+
+            report = self.db.get_report_detail(report_id) if report_id else None
+
+            if webhook_url:
+                try:
+                    payload_msg = {
+                        "text": f"🚨 *AURA SAFETY ALERT*: Near-Miss Report `{report_id or 'General'}`",
+                        "blocks": [
+                            {
+                                "type": "header",
+                                "text": {"type": "plain_text", "text": "🚨 Aura Safety Co-Pilot Notification"}
+                            },
+                            {
+                                "type": "section",
+                                "fields": [
+                                    {"type": "mrkdwn", "text": f"*Report ID:* {report_id or 'N/A'}"},
+                                    {"type": "mrkdwn", "text": f"*Location:* {report.get('location') if report else 'Field Site'}"},
+                                    {"type": "mrkdwn", "text": f"*Equipment:* {report.get('equipment') if report else 'Field Equipment'}"},
+                                    {"type": "mrkdwn", "text": f"*Worker ID:* {worker_id}"}
+                                ]
+                            }
+                        ]
+                    }
+                    resp = requests.post(webhook_url, json=payload_msg, timeout=5)
+                    if resp.status_code == 200:
+                        notified = True
+                    else:
+                        notified = False
+                        reason = f"Slack webhook returned HTTP {resp.status_code}"
+                except Exception as e:
+                    notified = False
+                    reason = f"Slack delivery failed: {str(e)}"
+            else:
+                notified = False
+                reason = "webhook_not_configured"
+
             notification_id = self.db.create_notification({
                 "alert_type": "near_miss",
                 "severity": "high",
-                "location": "Site Main",
+                "location": report.get("location") if report else "Site Main",
                 "recipient_role": roles[0],
                 "sender_id": worker_id
             })
+
             self.audit_logger.log_action(
                 user_id=worker_id,
                 action=AuditAction.NOTIFICATION_SENT,
                 session_id=session_id,
                 metadata={
                     "notification_id": notification_id,
+                    "report_id": report_id,
                     "recipient_role": roles[0],
-                    "channel": channel,
+                    "notified": notified,
+                    "reason": reason,
                     "worker_id": worker_id
                 },
                 provenance=state.report.get_provenance_dict() if state and state.report else None
             )
-            return {"notified": roles, "channel": channel}
+
+            if notified:
+                return {"notified": roles, "channel": channel, "success": True}
+            else:
+                return {"notified": False, "reason": reason}
 
         # 10. draft_corrective_action (Draft only, pending supervisor)
         elif tool_name == "draft_corrective_action":

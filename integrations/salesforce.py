@@ -13,8 +13,8 @@ Current implementation uses placeholder field names matching UI contract.
 """
 
 from typing import Optional
-from .database import DatabaseInterface
-from ..core.config import get_config
+from integrations.database import DatabaseInterface
+from backend.config import get_config
 
 
 class SalesforceClient:
@@ -22,14 +22,9 @@ class SalesforceClient:
 
     def __init__(self):
         config = get_config()
-        self.username = config.SALESFORCE_USERNAME
-        self.password = config.SALESFORCE_PASSWORD
-        self.security_token = config.SALESFORCE_SECURITY_TOKEN
-
-        # TODO: Initialize Salesforce connection only when real credentials available
-        # self.client = None
-        # if all([self.username, self.password, self.security_token]):
-        #     self.client = SalesforceConnector(...)
+        self.username = getattr(config, "SALESFORCE_USERNAME", "")
+        self.password = getattr(config, "SALESFORCE_PASSWORD", "")
+        self.security_token = getattr(config, "SALESFORCE_SECURITY_TOKEN", "")
 
         self.available = False  # Stub until real integration
 
@@ -42,24 +37,10 @@ class SalesforceClient:
         provenance: Optional[dict] = None,
         worker_id: str = "",
     ) -> str:
-        """Write structured maintenance entry to Salesforce.
-
-        TODO: Replace Salesforce API call with real integration.
-        Field names below are UI contract placeholders, NOT Salesforce field API names.
-
-        Salesforce schema needed:
-        - Object: e.g., Maintenance_Entry__c
-        - Fields: Location__c, Equipment__c, Issue_Description__c, Severity__c,
-                  Provenance__c (JSON), Worker__c (lookup), CreatedDate
-        """
         if not self.available:
             raise RuntimeError(
-                "Salesforce integration not configured. "
-                "Provide real Salesforce credentials and schema mapping."
+                "Salesforce integration not configured. Provide real Salesforce credentials and schema mapping."
             )
-
-        # TODO: Real Salesforce API call here
-        # Salesforce SDK: simple_salesforce, Salesforce REST API, etc.
         raise NotImplementedError("Salesforce integration stub - provide real implementation")
 
     def create_report(
@@ -73,18 +54,8 @@ class SalesforceClient:
         idempotency_key: str = "",
         worker_id: str = "",
     ) -> str:
-        """Write near-miss report to Salesforce.
-
-        Salesforce schema needed:
-        - Object: e.g., Near_Miss_Report__c
-        - Fields: Location__c, Equipment__c, Hazard_Type__c, Injury__c,
-                  Narrative__c, Provenance__c (JSON), Idempotency_Key__c,
-                  Worker__c (lookup), Status__c (awaiting_review/in_progress/approved/rejected),
-                  CreatedDate
-        """
         if not self.available:
             raise RuntimeError(
-                "Salesforce integration not configured. "
-                "Provide real Salesforce credentials and schema mapping."
+                "Salesforce integration not configured. Provide real Salesforce credentials and schema mapping."
             )
         raise NotImplementedError("Salesforce integration stub - provide real implementation")
