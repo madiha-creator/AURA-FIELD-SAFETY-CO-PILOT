@@ -23,6 +23,7 @@ export const NarrativeCaptureView: React.FC<NarrativeCaptureViewProps> = ({
   onCancel
 }) => {
   const isListening = voiceState === 'listening';
+  const isProcessing = voiceState === 'processing';
 
   return (
     <div
@@ -103,7 +104,7 @@ export const NarrativeCaptureView: React.FC<NarrativeCaptureViewProps> = ({
             textTransform: 'uppercase'
           }}
         >
-          {isListening ? 'AURA IS LISTENING...' : 'TAP ORB TO SPEAK'}
+          {isListening ? 'AURA IS LISTENING...' : isProcessing ? 'UNDERSTANDING...' : 'TAP ORB TO SPEAK'}
         </div>
 
         <p
@@ -167,7 +168,7 @@ export const NarrativeCaptureView: React.FC<NarrativeCaptureViewProps> = ({
             textAlign: 'right'
           }}
         >
-          {isListening ? 'Listening for speech pause...' : 'Ready'}
+          {isListening ? 'Listening for speech pause...' : isProcessing ? 'Processing...' : 'Ready'}
         </div>
       </div>
 

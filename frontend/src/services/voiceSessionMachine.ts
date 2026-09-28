@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { AudioManager } from '../audio/audioManager';
 import { TURN_DETECTION_CONFIG } from '../audio/config';
+import { pcmWorkerCode, arrayBufferToBase64 } from '../audio/pcmWorker';
 import {
   VoiceState,
   SemanticVariant,
@@ -51,10 +52,83 @@ export function useVoiceSession(): [VoiceSessionState, VoiceSessionEvents] {
   const activeSafetyAlertRef = useRef<SafetyAlertData | null>(null);
   const isDangerLockedRef = useRef<boolean>(false);
 
+  // AUD-003: Live microphone capture graph (input.audio streaming to backend)
+  const captureCtxRef = useRef<AudioContext | null>(null);
+  const captureWorkletRef = useRef<AudioWorkletNode | null>(null);
+  const captureSourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
+  const captureSilenceGainRef = useRef<GainNode | null>(null);
+  const captureTeardownTimerRef = useRef<number | null>(null);
+  const isCapturingRef = useRef<boolean>(false);
+
+  // Tear down the mic-capture audio graph (stop streaming input.audio to backend)
+  const teardownCapture = useCallback(() => {
+    isCapturingRef.current = false;
+    if (captureTeardownTimerRef.current) {
+      window.clearTimeout(captureTeardownTimerRef.current);
+      captureTeardownTimerRef.current = null;
+    }
+    try { captureWorkletRef.current?.port.close(); } catch {}
+    try { captureWorkletRef.current?.disconnect(); } catch {}
+    try { captureSourceRef.current?.disconnect(); } catch {}
+    try { captureSilenceGainRef.current?.disconnect(); } catch {}
+    captureWorkletRef.current = null;
+    captureSourceRef.current = null;
+    captureSilenceGainRef.current = null;
+    if (captureCtxRef.current) {
+      try { captureCtxRef.current.close(); } catch {}
+      captureCtxRef.current = null;
+    }
+  }, []);
+
+  // Set up the mic-capture audio graph and begin streaming input.audio frames to the backend
+  const setupCapture = useCallback(async (stream: MediaStream) => {
+    teardownCapture();
+
+    const AudioCtxClass = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+    const ctx = new AudioCtxClass({ sampleRate: TURN_DETECTION_CONFIG.sample_rate });
+    if (ctx.state === 'suspended') {
+      await ctx.resume();
+    }
+
+    const blob = new Blob([pcmWorkerCode], { type: 'application/javascript' });
+    const moduleUrl = URL.createObjectURL(blob);
+    try {
+      await ctx.audioWorklet.addModule(moduleUrl);
+    } finally {
+      URL.revokeObjectURL(moduleUrl);
+    }
+
+    const source = ctx.createMediaStreamSource(stream);
+    const worklet = new AudioWorkletNode(ctx, 'pcm-processor');
+
+    // Route through a silent gain node to the destination: some browsers only
+    // pull audio worklet processing when the graph reaches the destination.
+    const silenceGain = ctx.createGain();
+    silenceGain.gain.value = 0;
+
+    worklet.port.onmessage = (event: MessageEvent<ArrayBuffer>) => {
+      if (!isCapturingRef.current) return;
+      if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
+      const base64 = arrayBufferToBase64(event.data);
+      wsRef.current.send(JSON.stringify({ type: 'input.audio', audio: base64 }));
+    };
+
+    source.connect(worklet);
+    worklet.connect(silenceGain);
+    silenceGain.connect(ctx.destination);
+
+    captureCtxRef.current = ctx;
+    captureSourceRef.current = source;
+    captureWorkletRef.current = worklet;
+    captureSilenceGainRef.current = silenceGain;
+    isCapturingRef.current = true;
+  }, [teardownCapture]);
+
   // Initialize AudioManager on mount
   useEffect(() => {
     audioManagerRef.current = new AudioManager(TURN_DETECTION_CONFIG.sample_rate);
     return () => {
+      teardownCapture();
       if (mediaStreamRef.current) {
         mediaStreamRef.current.getTracks().forEach(t => t.stop());
       }
@@ -65,6 +139,7 @@ export function useVoiceSession(): [VoiceSessionState, VoiceSessionEvents] {
       if (speakingTimerRef.current) window.clearTimeout(speakingTimerRef.current);
       audioManagerRef.current?.stopAndClear();
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const addTranscript = useCallback((sender: 'worker' | 'aura' | 'system', text: string) => {
@@ -116,10 +191,12 @@ export function useVoiceSession(): [VoiceSessionState, VoiceSessionEvents] {
               try { sessionStorage.setItem('aura_voice_session_id', msg.session_id); } catch {}
             }
           } else if (msg.type === 'reply.audio') {
+            if (processingTimerRef.current) window.clearTimeout(processingTimerRef.current);
             setLastAuraAudioChunk(msg.audio);
             audioManagerRef.current?.enqueueChunk(msg.audio);
             setVoiceState('speaking');
           } else if (msg.type === 'agent_reply') {
+            if (processingTimerRef.current) window.clearTimeout(processingTimerRef.current);
             addTranscript('aura', msg.text);
             setLastAuraResponse(msg.text);
 
@@ -179,6 +256,33 @@ export function useVoiceSession(): [VoiceSessionState, VoiceSessionEvents] {
             };
             activeSafetyAlertRef.current = alertData;
             setActiveSafetyAlert(alertData);
+          } else if (msg.type === 'transcript.user.delta') {
+            // Live partial transcript while the worker is still speaking
+            setPartialUserText(msg.text || '');
+          } else if (msg.type === 'transcript.user') {
+            // Finalized transcript of the worker's turn
+            setPartialUserText('');
+            if (msg.text) {
+              addTranscript('worker', msg.text);
+            }
+            setVoiceState('processing');
+            setCurrentCaption('UNDERSTANDING...');
+            // Safety net: never hang on "understanding" if no reply arrives
+            if (processingTimerRef.current) window.clearTimeout(processingTimerRef.current);
+            processingTimerRef.current = window.setTimeout(() => {
+              setVoiceState(prev => (prev === 'processing' ? 'ready' : prev));
+              setCurrentCaption('No response received. Tap the orb to try again.');
+            }, 20000);
+          } else if (msg.type === 'voice_unavailable') {
+            // Backend has no ASSEMBLYAI_API_KEY configured; mic input can't be transcribed
+            teardownCapture();
+            setVoiceState('ready');
+            setCurrentCaption(msg.message || 'Voice transcription unavailable. Try typing instead.');
+            addTranscript('system', msg.message || 'Voice transcription is not configured on this server. Use text input instead.');
+          } else if (msg.type === 'session.error') {
+            addTranscript('system', `Voice session error: ${msg.message || 'unknown error'}`);
+            setErrorDetail(msg.message);
+            setVoiceState('ready');
           }
         } catch {
           // Ignore non-json frames
@@ -196,7 +300,7 @@ export function useVoiceSession(): [VoiceSessionState, VoiceSessionEvents] {
       // Backend is offline or unreachable; fallback to standalone offline mode
       setIsConnected(false);
     }
-  }, [addTranscript, sessionId]);
+  }, [addTranscript, sessionId, teardownCapture]);
 
   // Try initial backend connection once on mount
   useEffect(() => {
@@ -216,6 +320,7 @@ export function useVoiceSession(): [VoiceSessionState, VoiceSessionEvents] {
           audio: { sampleRate: 24000, echoCancellation: true, noiseSuppression: true }
         });
       }
+      await setupCapture(mediaStreamRef.current);
       setVoiceState('listening');
       setPartialUserText('');
       setCurrentCaption('Listening to your voice...');
@@ -225,19 +330,27 @@ export function useVoiceSession(): [VoiceSessionState, VoiceSessionEvents] {
       setErrorDetail(e?.message || 'Microphone access denied or hardware unavailable.');
       setCurrentCaption('Microphone permission required. Tap to retry.');
     }
-  }, []);
+  }, [setupCapture]);
 
   // Stop listening / finalize turn
   const stopListening = useCallback(() => {
     if (voiceState === 'listening') {
       setVoiceState('processing');
       setCurrentCaption('UNDERSTANDING...');
+
+      // Keep streaming briefly so the server VAD can observe trailing silence
+      // and finalize the transcript, then tear the capture graph down.
+      if (captureTeardownTimerRef.current) window.clearTimeout(captureTeardownTimerRef.current);
+      captureTeardownTimerRef.current = window.setTimeout(() => {
+        teardownCapture();
+      }, TURN_DETECTION_CONFIG.silence_duration_ms + 400);
     }
-  }, [voiceState]);
+  }, [voiceState, teardownCapture]);
 
   // Interrupt agent immediately (Barge-in rule)
   const interruptAgent = useCallback(() => {
     audioManagerRef.current?.stopAndClear();
+    teardownCapture();
     if (speakingTimerRef.current) window.clearTimeout(speakingTimerRef.current);
     if (processingTimerRef.current) window.clearTimeout(processingTimerRef.current);
 
@@ -258,7 +371,7 @@ export function useVoiceSession(): [VoiceSessionState, VoiceSessionEvents] {
         setCurrentCaption('Ready when you are.');
       }
     }, 1500);
-  }, [addTranscript]);
+  }, [addTranscript, teardownCapture]);
 
   // Replay last response
   const replayLastResponse = useCallback(() => {
