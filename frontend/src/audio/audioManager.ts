@@ -14,7 +14,11 @@ export class AudioManager {
   public async init() {
     if (!this.audioCtx) {
       const AudioCtxClass = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-      this.audioCtx = new AudioCtxClass({ sampleRate: this.sampleRate });
+         try {
+     this.audioCtx = new AudioCtxClass({ sampleRate: this.sampleRate });
+   } catch {
+     this.audioCtx = new AudioCtxClass();
+   }
     }
     if (this.audioCtx.state === 'suspended') {
       await this.audioCtx.resume();
