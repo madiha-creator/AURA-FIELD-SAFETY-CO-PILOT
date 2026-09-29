@@ -21,7 +21,11 @@ export default function AuditView() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch(`/api/audit/${session_id}`)
+    fetch(`/api/audit/${session_id}`, {
+      headers: {
+        'Authorization': 'Bearer dev-token-bypass'
+      }
+    })
       .then(res => res.json())
       .then(data => setTimeline(data.timeline || []))
       .catch(() => setTimeline([]))

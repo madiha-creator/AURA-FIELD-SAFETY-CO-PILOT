@@ -7,6 +7,7 @@ import Patterns from './pages/Patterns';
 import Maintenance from './pages/Maintenance';
 import AuditView from './pages/AuditView';
 import Worker from './pages/Worker';
+import Entry from './pages/Entry';
 import { SupervisorShell } from './components/layout/SupervisorShell';
 
 export default function App() {
@@ -28,11 +29,13 @@ export default function App() {
       }}
     >
       <Routes>
-        {/* Supervisor Authentication */}
+        {/* Root Role Entry & Navigation */}
+        <Route path="/" element={<Entry />} />
+
+        {/* Supervisor Authentication (FE-004 Daylight UI) */}
         <Route path="/login" element={<Login />} />
 
         {/* Frontline Worker Voice Routes */}
-        <Route path="/" element={<Worker />} />
         <Route path="/worker" element={<Worker />} />
 
         {/* Supervisor Cockpit Operational Routes (Wrapped in SupervisorShell) */}

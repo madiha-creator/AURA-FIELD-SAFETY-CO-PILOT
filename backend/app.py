@@ -12,7 +12,7 @@ from flask_cors import CORS
 from flask_sock import Sock
 
 from integrations.database import get_database
-from backend.audit_logger import AuditLogger
+from backend.audit_logger import AuditLogger, AuditAction
 from backend.state_manager import get_state_manager, ConfirmationStatus
 import backend.tool_dispatcher as tool_dispatcher_mod
 from audio.token_routes import register_token_routes, require_bearer_auth
@@ -76,9 +76,73 @@ def list_reviews():
             continue
         if equipment and equipment.lower() not in r.get("equipment", "").lower():
             continue
-        filtered.append(r)
+        r_dict = dict(r)
+        r_dict["pattern_detected"] = bool(r.get("pattern_detected"))
+        filtered.append(r_dict)
 
     return jsonify({"reviews": filtered, "count": len(filtered)})
+
+@app.route("/api/reports", methods=["POST"])
+@require_bearer_auth
+def create_report_endpoint():
+    data = request.json or {}
+    report_data = data.get("report", data)
+    worker_id = getattr(request, "user_id", data.get("worker_id") or report_data.get("worker_id") or "worker_01")
+    report_id = data.get("id") or report_data.get("id")
+    session_id = data.get("session_id") or f"session_{report_id}"
+
+    idempotency_key = data.get("idempotency_key") or report_data.get("idempotency_key")
+    if not idempotency_key:
+        idempotency_key = tool_dispatcher_mod.compute_idempotency_key(
+            worker_id=worker_id,
+            site=report_data.get("location", ""),
+            equipment=report_data.get("equipment", ""),
+            narrative=report_data.get("narrative", "")
+        )
+
+    # Check for duplicate idempotency key
+    existing = db.get_report_by_idempotency_key(idempotency_key)
+    if existing:
+        audit_logger.log_action(
+            user_id=worker_id,
+            action=AuditAction.REPORT_CREATED,
+            session_id=session_id,
+            metadata={"report_id": existing["id"], "created": False, "duplicate": True, "worker_id": worker_id}
+        )
+        return jsonify({"report_id": existing["id"], "created": False, "duplicate": True}), 200
+
+    created_id = db.create_report({
+        "id": report_id,
+        "location": report_data.get("location", ""),
+        "equipment": report_data.get("equipment", ""),
+        "hazard_type": report_data.get("hazard_type", ""),
+        "injury": report_data.get("injury", "No injuries reported"),
+        "narrative": report_data.get("narrative", ""),
+        "provenance": report_data.get("provenance", {}),
+        "worker_id": worker_id,
+        "idempotency_key": idempotency_key,
+        "status": report_data.get("status", "awaiting_review"),
+        "pattern_detected": 1 if report_data.get("pattern_detected") else 0,
+        "recurrence_sentence": report_data.get("recurrence_sentence", "")
+    })
+
+    audit_logger.log_action(
+        user_id=worker_id,
+        action=AuditAction.REPORT_CREATED,
+        session_id=session_id,
+        metadata={"report_id": created_id, "created": True, "duplicate": False, "worker_id": worker_id},
+        provenance=report_data.get("provenance")
+    )
+    if session_id != f"session_{created_id}":
+        audit_logger.log_action(
+            user_id=worker_id,
+            action=AuditAction.REPORT_CREATED,
+            session_id=f"session_{created_id}",
+            metadata={"report_id": created_id, "created": True, "duplicate": False, "worker_id": worker_id},
+            provenance=report_data.get("provenance")
+        )
+
+    return jsonify({"report_id": created_id, "created": True, "duplicate": False}), 201
 
 @app.route("/api/reviews/<report_id>", methods=["GET"])
 @require_bearer_auth
@@ -223,6 +287,13 @@ def ws_agent_loop(ws):
         state = state_manager.create_session(user_id="worker_01", session_id=session_id)
 
     tool_dispatcher = tool_dispatcher_mod.ToolDispatcher(state_manager, audit_logger)
+
+    def get_current_state():
+        """Never crash on a missing/expired session; recreate it in place."""
+        current = state_manager.get_state(session_id)
+        if current is None:
+            current = state_manager.create_session(user_id="worker_01", session_id=session_id)
+        return current
 
     send_lock = threading.Lock()
 
@@ -419,6 +490,7 @@ def ws_agent_loop(ws):
                     safe_send({"type": "reply.audio", "audio": audio})
 
             elif etype == "reply.done":
+                get_current_state()  # touch + recreate-if-expired so this turn can't crash
                 pending = turn_state["pending_tools"]
                 if pending:
                     turn_state["pending_tools"] = []
@@ -445,30 +517,22 @@ def ws_agent_loop(ws):
 
                         if assemblyai_proxy:
                             assemblyai_proxy.send_json(payload)
-
-                        safe_send({
-                            "type": "tool.result",
-                            "tool": name,
-                            "result": result
-                        })
-                        if name == "check_safety_threshold" and isinstance(result, dict) and result.get("in_range") is False:
-                            safe_send({
-                                "type": "safety_alert",
-                                "alert": result,
-                                "message": result.get("message")
-                            })
-
-                text = turn_state["last_agent_text"] or "Ready for the next step."
-                payload = {
-                    "type": "agent_reply",
-                    "text": text,
-                    "mode": state_manager.get_state(session_id).mode.value,
-                }
-                if turn_state["last_audio_chunk"]:
-                    payload["audio"] = turn_state["last_audio_chunk"]
-                safe_send(payload)
-                turn_state["last_agent_text"] = ""
-                turn_state["last_audio_chunk"] = None
+                        # Surface safety alerts to the browser UI
+                        if call.get("name") == "check_safety_threshold" and isinstance(result, dict) \
+                                and result.get("in_range") is False:
+                            safe_send({"type": "safety_alert", "alert": result, "message": result.get("message")})
+                else:
+                    text = turn_state["last_agent_text"] or "Ready for the next step."
+                    payload = {
+                        "type": "agent_reply",
+                        "text": text,
+                        "mode": get_current_state().mode.value,
+                    }
+                    if turn_state["last_audio_chunk"]:
+                        payload["audio"] = turn_state["last_audio_chunk"]
+                    safe_send(payload)
+                    turn_state["last_agent_text"] = ""
+                    turn_state["last_audio_chunk"] = None
 
             elif etype == "session.error":
                 safe_send({"type": "session.error",
