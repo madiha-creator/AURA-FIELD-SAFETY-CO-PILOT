@@ -259,7 +259,12 @@ def get_session_audit(session_id):
 # WebSocket Support for Local Voice Agent / Mock Session Loop (BE-001 / BE-003)
 # ----------------------------------------------------------------------------
 from flask_sock import Sock
-from backend.assemblyai_service import build_session_update, handle_assemblyai_message
+from backend.assemblyai_service import (
+    accumulate_agent_delta,
+    build_session_update,
+    handle_assemblyai_message,
+    handle_reply_done,
+)
 from backend.assemblyai_proxy import AssemblyAIProxy
 import json
 import threading
@@ -466,6 +471,9 @@ def ws_agent_loop(ws):
             elif etype == "transcript.user.delta":
                 safe_send({"type": "transcript.user.delta", "text": event.get("text") or ""})
 
+            elif etype == "transcript.agent.delta":
+                accumulate_agent_delta(event, turn_state)
+
             elif etype == "transcript.user":
                 text = event.get("text") or ""
                 if text:
@@ -504,7 +512,9 @@ def ws_agent_loop(ws):
                         })
 
             elif etype == "transcript.agent":
-                turn_state["last_agent_text"] = event.get("text") or ""
+                text = event.get("text") or ""
+                if text:
+                    turn_state["last_agent_text"] = text
 
             elif etype == "reply.audio":
                 audio = event.get("data") or event.get("audio")
@@ -538,17 +548,9 @@ def ws_agent_loop(ws):
                                 and result.get("in_range") is False:
                             safe_send({"type": "safety_alert", "alert": result, "message": result.get("message")})
                 else:
-                    text = turn_state["last_agent_text"] or "Ready for the next step."
-                    payload = {
-                        "type": "agent_reply",
-                        "text": text,
-                        "mode": get_current_state().mode.value,
-                    }
-                    if turn_state["last_audio_chunk"]:
-                        payload["audio"] = turn_state["last_audio_chunk"]
-                    safe_send(payload)
-                    turn_state["last_agent_text"] = ""
-                    turn_state["last_audio_chunk"] = None
+                    mode = get_current_state().mode.value
+                    for payload in handle_reply_done(event, state_manager, turn_state, mode):
+                        safe_send(payload)
 
             elif etype == "session.error":
                 safe_send({"type": "session.error",
