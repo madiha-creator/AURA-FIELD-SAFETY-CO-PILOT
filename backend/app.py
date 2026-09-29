@@ -379,7 +379,7 @@ def ws_agent_loop(ws):
                 "system_prompt": base_update.get("system_prompt", ""),
                 "greeting": base_update.get("greeting", ""),
                 "input": {"turn_detection": {"vad_threshold": 0.5}},
-                "output": {"voice": "alba"},
+                "output": {"voice": "vera"},
                 "tools": tools,
             },
         }
