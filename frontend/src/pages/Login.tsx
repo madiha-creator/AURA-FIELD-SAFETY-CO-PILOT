@@ -3,15 +3,6 @@ import { useNavigate } from 'react-router-dom';
 import { AuraLogoSvg } from '../components/voice/AuraLogoSvg';
 import { ShieldCheck, ArrowRight, Lock, User } from 'lucide-react';
 
-/**
- * FE-004 Redesigned Supervisor Login Screen
- *
- * Route: /login
- * Visual System: AURA Daylight Industrial Architecture
- * - Uses AURA design tokens (var(--bg-app), var(--bg-surface), var(--aura-teal), etc.)
- * - Embedded AuraLogoSvg brand mark
- * - Preserves supervisor_auth credential write and navigates to /inbox
- */
 export default function Login() {
   const [username, setUsername] = useState('supervisor@aura.safety');
   const [password, setPassword] = useState('password');

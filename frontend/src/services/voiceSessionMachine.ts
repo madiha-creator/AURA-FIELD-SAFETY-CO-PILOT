@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { AudioManager } from '../audio/audioManager';
 import { TURN_DETECTION_CONFIG } from '../audio/config';
+import { pcmWorkerCode, arrayBufferToBase64 } from '../audio/pcmWorker';
 import {
   VoiceState,
   SemanticVariant,
@@ -100,10 +101,85 @@ export function useVoiceSession(): [VoiceSessionState, VoiceSessionEvents] {
   const isDangerLockedRef = useRef<boolean>(false);
   const lastSentTurnRef = useRef<string>('');
 
+  // AUD-003: Live microphone capture graph (input.audio streaming to backend)
+  const captureCtxRef = useRef<AudioContext | null>(null);
+  const captureWorkletRef = useRef<AudioWorkletNode | null>(null);
+  const captureSourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
+  const captureSilenceGainRef = useRef<GainNode | null>(null);
+  const captureTeardownTimerRef = useRef<number | null>(null);
+  const isCapturingRef = useRef<boolean>(false);
+
+  // Tear down the mic-capture audio graph (stop streaming input.audio to backend)
+  const teardownCapture = useCallback(() => {
+    isCapturingRef.current = false;
+    if (captureTeardownTimerRef.current) {
+      window.clearTimeout(captureTeardownTimerRef.current);
+      captureTeardownTimerRef.current = null;
+    }
+    try { captureWorkletRef.current?.port.close(); } catch {}
+    try { captureWorkletRef.current?.disconnect(); } catch {}
+    try { captureSourceRef.current?.disconnect(); } catch {}
+    try { captureSilenceGainRef.current?.disconnect(); } catch {}
+    captureWorkletRef.current = null;
+    captureSourceRef.current = null;
+    captureSilenceGainRef.current = null;
+    if (captureCtxRef.current) {
+      try { captureCtxRef.current.close(); } catch {}
+      captureCtxRef.current = null;
+    }
+  }, []);
+
+  // Set up the mic-capture audio graph and begin streaming input.audio frames to the backend
+  const setupCapture = useCallback(async (stream: MediaStream) => {
+    teardownCapture();
+
+    const AudioCtxClass = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+    const ctx = new AudioCtxClass(); // native device rate; the worklet resamples to 24 kHz
+    if (ctx.state === 'suspended') {
+      await ctx.resume();
+    }
+
+    const blob = new Blob([pcmWorkerCode], { type: 'application/javascript' });
+    const moduleUrl = URL.createObjectURL(blob);
+    try {
+      await ctx.audioWorklet.addModule(moduleUrl);
+    } finally {
+      URL.revokeObjectURL(moduleUrl);
+    }
+
+    const source = ctx.createMediaStreamSource(stream);
+    const worklet = new AudioWorkletNode(ctx, 'pcm-processor', {
+      processorOptions: { targetRate: TURN_DETECTION_CONFIG.sample_rate },
+    });
+
+    // Route through a silent gain node to the destination: some browsers only
+    // pull audio worklet processing when the graph reaches the destination.
+    const silenceGain = ctx.createGain();
+    silenceGain.gain.value = 0;
+
+    worklet.port.onmessage = (event: MessageEvent<ArrayBuffer>) => {
+      if (!isCapturingRef.current) return;
+      if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
+      const base64 = arrayBufferToBase64(event.data);
+      wsRef.current.send(JSON.stringify({ type: 'input.audio', audio: base64 }));
+    };
+
+    source.connect(worklet);
+    worklet.connect(silenceGain);
+    silenceGain.connect(ctx.destination);
+
+    captureCtxRef.current = ctx;
+    captureSourceRef.current = source;
+    captureWorkletRef.current = worklet;
+    captureSilenceGainRef.current = silenceGain;
+    isCapturingRef.current = true;
+  }, [teardownCapture]);
+
   // Initialize AudioManager on mount
   useEffect(() => {
     audioManagerRef.current = new AudioManager(TURN_DETECTION_CONFIG.sample_rate);
     return () => {
+      teardownCapture();
       if (mediaStreamRef.current) {
         mediaStreamRef.current.getTracks().forEach(t => t.stop());
       }
@@ -114,6 +190,7 @@ export function useVoiceSession(): [VoiceSessionState, VoiceSessionEvents] {
       if (speakingTimerRef.current) window.clearTimeout(speakingTimerRef.current);
       audioManagerRef.current?.stopAndClear();
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const addTranscript = useCallback((sender: 'worker' | 'aura' | 'system', text: string) => {
@@ -127,30 +204,69 @@ export function useVoiceSession(): [VoiceSessionState, VoiceSessionEvents] {
     return entry;
   }, []);
 
+  // Real headset detection (labels only appear after mic permission is granted)
+  const [hasHeadset, setHasHeadset] = useState<boolean>(false);
+  const refreshHeadsetRef = useRef<() => void>(() => {});
+  useEffect(() => {
+    const HEADSET_RE = /head(set|phone)|earbud|earphone|airpod|buds|bluetooth|hands-?free|jabra|plantronics|bose/i;
+    const refresh = async () => {
+      try {
+        if (!navigator.mediaDevices?.enumerateDevices) return;
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        setHasHeadset(devices.some(d => (d.kind === 'audioinput' || d.kind === 'audiooutput') && HEADSET_RE.test(d.label)));
+      } catch {
+        setHasHeadset(false);
+      }
+    };
+    refreshHeadsetRef.current = refresh;
+    refresh();
+    navigator.mediaDevices?.addEventListener?.('devicechange', refresh);
+    return () => navigator.mediaDevices?.removeEventListener?.('devicechange', refresh);
+  }, []);
+
+  // Auto-reconnect support (server may be waking up, or a phone may change network)
+  const reconnectTimerRef = useRef<number | null>(null);
+  const retryCountRef = useRef<number>(0);
+  const unmountedRef = useRef<boolean>(false);
+  const connectRef = useRef<() => void>(() => {});
+
+  const scheduleRetry = useCallback(() => {
+    if (unmountedRef.current) return;
+    if (reconnectTimerRef.current) window.clearTimeout(reconnectTimerRef.current);
+    const delay = Math.min(1500 * Math.pow(1.6, retryCountRef.current), 10000);
+    retryCountRef.current += 1;
+    reconnectTimerRef.current = window.setTimeout(() => {
+      reconnectTimerRef.current = null;
+      connectRef.current();
+    }, delay);
+  }, []);
+
   // Connect to backend WebSocket / token route
   const connectWebSocket = useCallback(async () => {
+    // Avoid duplicate connections
+    if (wsRef.current && (wsRef.current.readyState === WebSocket.OPEN || wsRef.current.readyState === WebSocket.CONNECTING)) {
+      return;
+    }
     try {
-      // Use dev proxy / relative token endpoint or fallback to local
-      const tokenUrl = window.location.port === '3000'
-        ? 'http://127.0.0.1:5000/v1/token'
-        : '/v1/token';
-
-      const res = await fetch(tokenUrl, {
+      // Always use same-origin URLs: in dev, Vite proxies /v1 to the backend;
+      // in production the backend serves this app, so the paths just work.
+      const res = await fetch('/v1/token', {
         headers: { 'Authorization': 'Bearer dev-token-bypass' }
       });
 
       if (!res.ok) throw new Error(`Token fetch failed (${res.status})`);
       const tokenData = await res.json();
-      const baseWs = tokenData.ws_url || `ws://127.0.0.1:5000/v1/ws?token=${tokenData.token}`;
-      const wsUrl = baseWs.includes('session_id=')
-        ? baseWs
-        : `${baseWs}${baseWs.includes('?') ? '&' : '?'}session_id=${encodeURIComponent(sessionId)}`;
+      const wsProto = window.location.protocol === 'https:' ? 'wss' : 'ws';
+      const baseWs = `${wsProto}://${window.location.host}/v1/ws?token=${encodeURIComponent(tokenData.token || '')}`;
+      const wsUrl = `${baseWs}&session_id=${encodeURIComponent(sessionId)}`;
 
       const ws = new WebSocket(wsUrl);
       wsRef.current = ws;
 
       ws.onopen = () => {
+        retryCountRef.current = 0;
         setIsConnected(true);
+        setErrorDetail(undefined);
         setVoiceState('ready');
       };
 
@@ -165,10 +281,12 @@ export function useVoiceSession(): [VoiceSessionState, VoiceSessionEvents] {
               try { sessionStorage.setItem('aura_voice_session_id', msg.session_id); } catch {}
             }
           } else if (msg.type === 'reply.audio') {
+            if (processingTimerRef.current) window.clearTimeout(processingTimerRef.current);
             setLastAuraAudioChunk(msg.audio);
             audioManagerRef.current?.enqueueChunk(msg.audio);
             setVoiceState('speaking');
-          } else if (msg.type === 'agent_reply') {
+            } else if (msg.type === 'agent_reply') {
+            if (processingTimerRef.current) window.clearTimeout(processingTimerRef.current);
             let replyText = msg.text;
             if (replyText && replyText.startsWith("Aura received: '")) {
               const conversationalReply = matchConversationalIntent(lastSentTurnRef.current || '');
@@ -235,29 +353,87 @@ export function useVoiceSession(): [VoiceSessionState, VoiceSessionEvents] {
             };
             activeSafetyAlertRef.current = alertData;
             setActiveSafetyAlert(alertData);
+          } else if (msg.type === 'transcript.user.delta') {
+            // Live partial transcript while the worker is still speaking
+            setPartialUserText(msg.text || '');
+          } else if (msg.type === 'transcript.user') {
+            // Finalized transcript of the worker's turn
+            setPartialUserText('');
+            if (msg.text) {
+              addTranscript('worker', msg.text);
+            }
+            setVoiceState('processing');
+            setCurrentCaption('UNDERSTANDING...');
+            // Safety net: never hang on "understanding" if no reply arrives
+            if (processingTimerRef.current) window.clearTimeout(processingTimerRef.current);
+            processingTimerRef.current = window.setTimeout(() => {
+              setVoiceState(prev => (prev === 'processing' ? 'ready' : prev));
+              setCurrentCaption('No response received. Tap the orb to try again.');
+            }, 20000);
+          } else if (msg.type === 'voice_unavailable') {
+            // Backend has no ASSEMBLYAI_API_KEY configured; mic input can't be transcribed
+            teardownCapture();
+            setVoiceState('ready');
+            setCurrentCaption(msg.message || 'Voice transcription unavailable. Try typing instead.');
+            addTranscript('system', msg.message || 'Voice transcription is not configured on this server. Use text input instead.');
+          } else if (msg.type === 'session.error') {
+            addTranscript('system', `Voice session error: ${msg.message || 'unknown error'}`);
+            setErrorDetail(msg.message);
+            setVoiceState('ready');
           }
         } catch {
           // Ignore non-json frames
         }
       };
 
-      ws.onclose = () => {
+      ws.onclose = (ev) => {
+        if (wsRef.current !== ws) return; // a newer connection replaced this one
         setIsConnected(false);
+        setErrorDetail(`Connection closed (code ${ev.code}). Retrying...`);
+        scheduleRetry();
       };
 
       ws.onerror = () => {
+        if (wsRef.current !== ws) return;
         setIsConnected(false);
       };
-    } catch {
-      // Backend is offline or unreachable; fallback to standalone offline mode
+    } catch (err: any) {
+      // Backend is offline, asleep, or unreachable: retry automatically
       setIsConnected(false);
+      setErrorDetail(`${err?.message || 'Cannot reach server'}. Retrying...`);
+      scheduleRetry();
     }
-  }, [addTranscript, sessionId]);
+  }, [addTranscript, sessionId, teardownCapture, scheduleRetry]);
 
-  // Try initial backend connection once on mount
+  // Keep a ref to the latest connect function for the retry timer
   useEffect(() => {
-    connectWebSocket();
+    connectRef.current = connectWebSocket;
   }, [connectWebSocket]);
+
+  // Initial connection on mount, plus reconnect when the phone wakes up or regains network
+  useEffect(() => {
+    unmountedRef.current = false;
+    connectWebSocket();
+
+    const reconnectNow = () => {
+      if (unmountedRef.current) return;
+      if (!wsRef.current || wsRef.current.readyState === WebSocket.CLOSED || wsRef.current.readyState === WebSocket.CLOSING) {
+        retryCountRef.current = 0;
+        connectRef.current();
+      }
+    };
+    const onVisible = () => { if (document.visibilityState === 'visible') reconnectNow(); };
+    window.addEventListener('online', reconnectNow);
+    document.addEventListener('visibilitychange', onVisible);
+
+    return () => {
+      unmountedRef.current = true;
+      if (reconnectTimerRef.current) window.clearTimeout(reconnectTimerRef.current);
+      window.removeEventListener('online', reconnectNow);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Start listening (Tap to speak)
   const startListening = useCallback(async () => {
@@ -269,31 +445,55 @@ export function useVoiceSession(): [VoiceSessionState, VoiceSessionEvents] {
       await audioManagerRef.current?.init();
       if (!mediaStreamRef.current) {
         mediaStreamRef.current = await navigator.mediaDevices.getUserMedia({
-          audio: { sampleRate: 24000, echoCancellation: true, noiseSuppression: true }
+          audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
         });
       }
+      refreshHeadsetRef.current();
+      await setupCapture(mediaStreamRef.current);
       setVoiceState('listening');
       setPartialUserText('');
       setCurrentCaption('Listening to your voice...');
       setErrorDetail(undefined);
     } catch (e: any) {
+      teardownCapture();
+      const name = e?.name || '';
+      let friendly = 'Could not start the microphone.';
+      if (name === 'NotAllowedError' || name === 'SecurityError') {
+        friendly = 'Microphone blocked. Allow microphone access in your browser settings, then tap to retry.';
+      } else if (name === 'NotFoundError' || name === 'OverconstrainedError') {
+        friendly = 'No microphone found on this device.';
+      } else if (name === 'NotReadableError') {
+        friendly = 'Microphone is being used by another app. Close it and tap to retry.';
+      } else if (!window.isSecureContext) {
+        friendly = 'Microphone needs a secure (https) connection.';
+      } else if (e?.message) {
+        friendly = `Microphone error: ${e.message}`;
+      }
       setVoiceState('microphone_error');
-      setErrorDetail(e?.message || 'Microphone access denied or hardware unavailable.');
-      setCurrentCaption('Microphone permission required. Tap to retry.');
+      setErrorDetail(`${name ? name + ': ' : ''}${e?.message || friendly}`);
+      setCurrentCaption(friendly);
     }
-  }, []);
+  }, [setupCapture, teardownCapture]);
 
   // Stop listening / finalize turn
   const stopListening = useCallback(() => {
     if (voiceState === 'listening') {
       setVoiceState('processing');
       setCurrentCaption('UNDERSTANDING...');
+
+      // Keep streaming briefly so the server VAD can observe trailing silence
+      // and finalize the transcript, then tear the capture graph down.
+      if (captureTeardownTimerRef.current) window.clearTimeout(captureTeardownTimerRef.current);
+      captureTeardownTimerRef.current = window.setTimeout(() => {
+        teardownCapture();
+      }, TURN_DETECTION_CONFIG.silence_duration_ms + 400);
     }
-  }, [voiceState]);
+  }, [voiceState, teardownCapture]);
 
   // Interrupt agent immediately (Barge-in rule)
   const interruptAgent = useCallback(() => {
     audioManagerRef.current?.stopAndClear();
+    teardownCapture();
     if (speakingTimerRef.current) window.clearTimeout(speakingTimerRef.current);
     if (processingTimerRef.current) window.clearTimeout(processingTimerRef.current);
 
@@ -314,7 +514,7 @@ export function useVoiceSession(): [VoiceSessionState, VoiceSessionEvents] {
         setCurrentCaption('Ready when you are.');
       }
     }, 1500);
-  }, [addTranscript]);
+  }, [addTranscript, teardownCapture]);
 
   // Replay last response
   const replayLastResponse = useCallback(() => {
@@ -479,7 +679,7 @@ export function useVoiceSession(): [VoiceSessionState, VoiceSessionEvents] {
     variant: semanticVariant,
     isConnected,
     isMicMuted,
-    hasHeadset: true,
+    hasHeadset,
     isPttActive: true,
     batteryLevel: 98,
     siteContext: {

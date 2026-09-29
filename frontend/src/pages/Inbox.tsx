@@ -59,7 +59,7 @@ export default function Inbox() {
     }
   };
 
-  useEffect(() => {
+   useEffect(() => {
     fetchReviews(true);
 
     const onFocus = () => fetchReviews(false);
@@ -76,7 +76,6 @@ export default function Inbox() {
   }, [statusFilter, siteFilter]);
 
   const pendingCount = reviews.filter(r => r.status === 'awaiting_review').length;
-
   return (
     <div>
       {/* Page Title & Status Header */}

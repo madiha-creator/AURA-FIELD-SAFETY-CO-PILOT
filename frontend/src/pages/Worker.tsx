@@ -424,7 +424,7 @@ export default function Worker() {
       siteTime={session.siteContext.timeString}
       onProfileClick={() => setIsProfileOpen(true)}
       onTranscriptClick={() => setIsTranscriptOpen(true)}
-      offlineNotice={!session.isConnected ? 'OPERATING IN OFFLINE LOCAL MODE — ALL VOICE SENTINELS ACTIVE' : undefined}
+         offlineNotice={!session.isConnected ? `OPERATING IN OFFLINE LOCAL MODE — ALL VOICE SENTINELS ACTIVE${session.errorDetail ? ` (${session.errorDetail})` : ''}` : undefined}
     >
       {/* Frontline Safety Alert Banner (FE-002 Layer 2 Override) */}
       {engine.safetyAlert && (
