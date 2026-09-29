@@ -90,14 +90,13 @@ export default function ReviewDetail() {
 
   const handleApprove = async () => {
     try {
-        const res = await fetch(`/api/reviews/${id}/reject`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': 'Bearer dev-token-bypass'
-          },
-          body: JSON.stringify({ reason: rejectReason.trim(), supervisor_id: 'sup_01' })
-        });
+      const res = await fetch(`/api/reviews/${id}/approve`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer dev-token-bypass'
+        },
+        body: JSON.stringify({ supervisor_id: 'sup_01' })
       });
       if (res.ok) {
         // Optimistic UI update after API success
