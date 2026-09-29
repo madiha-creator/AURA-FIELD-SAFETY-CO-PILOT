@@ -22,7 +22,8 @@ export default function Login() {
         justifyContent: 'center',
         minHeight: '100vh',
         backgroundColor: 'var(--bg-app)',
-        padding: '24px'
+        padding: '24px',
+        boxSizing: 'border-box'
       }}
     >
       <div
@@ -52,6 +53,7 @@ export default function Login() {
               marginBottom: '16px',
               boxShadow: 'var(--shadow-card)'
             }}
+            aria-hidden="true"
           >
             <AuraLogoSvg style={{ width: '100%', height: '100%' }} />
           </div>
@@ -75,7 +77,7 @@ export default function Login() {
               fontWeight: 800,
               color: 'var(--ink-950)',
               letterSpacing: '-0.01em',
-              marginBottom: '6px'
+              margin: '0 0 6px 0'
             }}
           >
             Supervisor Cockpit
@@ -85,7 +87,8 @@ export default function Login() {
               color: 'var(--ink-700)',
               fontSize: '14px',
               lineHeight: 1.4,
-              maxWidth: '320px'
+              maxWidth: '320px',
+              margin: 0
             }}
           >
             Access frontline near-miss reviews, recurrence patterns, and telemetry audit trails.
@@ -130,10 +133,16 @@ export default function Login() {
                 fontWeight: 500,
                 outline: 'none',
                 boxSizing: 'border-box',
-                transition: 'border-color 0.15s'
+                transition: 'border-color 0.15s, box-shadow 0.15s'
               }}
-              onFocus={(e) => (e.target.style.borderColor = 'var(--aura-teal)')}
-              onBlur={(e) => (e.target.style.borderColor = 'var(--border-subtle)')}
+              onFocus={(e) => {
+                e.target.style.borderColor = 'var(--aura-teal)';
+                e.target.style.boxShadow = '0 0 0 2px rgba(14, 119, 116, 0.2)';
+              }}
+              onBlur={(e) => {
+                e.target.style.borderColor = 'var(--border-subtle)';
+                e.target.style.boxShadow = 'none';
+              }}
             />
           </div>
 
@@ -173,20 +182,28 @@ export default function Login() {
                 fontWeight: 500,
                 outline: 'none',
                 boxSizing: 'border-box',
-                transition: 'border-color 0.15s'
+                transition: 'border-color 0.15s, box-shadow 0.15s'
               }}
-              onFocus={(e) => (e.target.style.borderColor = 'var(--aura-teal)')}
-              onBlur={(e) => (e.target.style.borderColor = 'var(--border-subtle)')}
+              onFocus={(e) => {
+                e.target.style.borderColor = 'var(--aura-teal)';
+                e.target.style.boxShadow = '0 0 0 2px rgba(14, 119, 116, 0.2)';
+              }}
+              onBlur={(e) => {
+                e.target.style.borderColor = 'var(--border-subtle)';
+                e.target.style.boxShadow = 'none';
+              }}
             />
           </div>
 
           <button
             type="submit"
+            aria-label="Sign In to Supervisor Cockpit"
             style={{
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               gap: '8px',
+              minHeight: '48px',
               height: '48px',
               backgroundColor: 'var(--aura-teal)',
               color: '#FFFFFF',
@@ -198,10 +215,25 @@ export default function Login() {
               cursor: 'pointer',
               marginTop: '8px',
               boxShadow: 'var(--shadow-card)',
-              transition: 'background-color 0.15s'
+              transition: 'background-color 0.15s, transform 0.1s, box-shadow 0.15s',
+              outline: 'none'
+            }}
+            onFocus={(e) => {
+              e.currentTarget.style.boxShadow = '0 0 0 3px rgba(14, 119, 116, 0.35)';
+            }}
+            onBlur={(e) => {
+              e.currentTarget.style.boxShadow = 'var(--shadow-card)';
             }}
             onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--aura-teal-dark)')}
             onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'var(--aura-teal)')}
+            onMouseDown={(e) => {
+              e.currentTarget.style.backgroundColor = 'var(--aura-teal-dark)';
+              e.currentTarget.style.transform = 'scale(0.99)';
+            }}
+            onMouseUp={(e) => {
+              e.currentTarget.style.backgroundColor = 'var(--aura-teal)';
+              e.currentTarget.style.transform = 'none';
+            }}
           >
             <ShieldCheck size={18} />
             <span>Sign In to Cockpit</span>

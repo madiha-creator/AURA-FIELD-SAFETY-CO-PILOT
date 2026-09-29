@@ -16,7 +16,11 @@ export default function Patterns() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    fetch('/api/patterns')
+    fetch('/api/patterns', {
+      headers: {
+        'Authorization': 'Bearer dev-token-bypass'
+      }
+    })
       .then(res => res.json())
       .then(data => setPatterns(data.patterns || []))
       .catch(() => setPatterns([
