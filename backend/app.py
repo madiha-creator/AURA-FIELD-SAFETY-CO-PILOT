@@ -3,16 +3,29 @@ Backend Server exposing REST API for Supervisor Web Dashboard and AssemblyAI Tok
 """
 
 import os
+import re
+import sys
+import json
+import threading
 from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
+from flask_sock import Sock
+
 from integrations.database import get_database
 from backend.audit_logger import AuditLogger, AuditAction
 from backend.state_manager import get_state_manager, ConfirmationStatus
 import backend.tool_dispatcher as tool_dispatcher_mod
 from audio.token_routes import register_token_routes, require_bearer_auth
 from backend.config import get_config
+from backend.assemblyai_service import build_session_update, handle_assemblyai_message
+from backend.assemblyai_proxy import AssemblyAIProxy
 
 config = get_config()
+validation_errors = config.validate()
+if validation_errors and config.ENV == "production":
+    print(f"[AURA FATAL] Production configuration validation failed: {validation_errors}", file=sys.stderr)
+    sys.exit(1)
+
 print(
     "[AURA] AssemblyAI key loaded: " + ("YES (real voice enabled)" if config.ASSEMBLYAI_API_KEY
     else "NO (voice disabled - check your .env file in the project root)"),
@@ -20,8 +33,14 @@ print(
 )
 app = Flask(__name__)
 
-# Restrict CORS to configured frontend origin
-cors_origins = [config.FRONTEND_ORIGIN, "http://127.0.0.1:5173", "http://localhost:5173", "http://127.0.0.1:3000", "http://localhost:3000"]
+# Restrict CORS to configured frontend origin + standard local environments
+cors_origins = [
+    config.FRONTEND_ORIGIN,
+    "http://127.0.0.1:5173",
+    "http://localhost:5173",
+    "http://127.0.0.1:3000",
+    "http://localhost:3000"
+]
 CORS(app, origins=cors_origins, supports_credentials=True)
 
 db = get_database()
@@ -165,16 +184,12 @@ def approve_review(report_id):
 
     notified_roles = []
     if send_notify:
-        notified_roles = ["safety_officer", "site_manager"]
-        report_site = report.get("location") or "Unspecified Site"
-        db.create_notification({
-            "alert_type": "near_miss_approved",
-            "severity": "medium",
-            "location": report_site,
-            "equipment": report.get("equipment"),
-            "recipient_role": "safety_officer",
-            "sender_id": supervisor_id
+        tool_dispatcher = tool_dispatcher_mod.ToolDispatcher(state_manager, audit_logger)
+        notify_res = tool_dispatcher.execute("notify_safety_contact", {
+            "report_id": report_id,
+            "site_policy": {"auto_notify_roles": ["safety_officer", "site_manager"], "channel": "slack/email"}
         })
+        notified_roles = notify_res.get("notified", ["safety_officer"])
 
     return jsonify({
         "status": "approved",
@@ -258,30 +273,15 @@ def get_session_audit(session_id):
 # ----------------------------------------------------------------------------
 # WebSocket Support for Local Voice Agent / Mock Session Loop (BE-001 / BE-003)
 # ----------------------------------------------------------------------------
-from flask_sock import Sock
-from backend.assemblyai_service import build_session_update, handle_assemblyai_message
-from backend.assemblyai_proxy import AssemblyAIProxy
-import json
-import threading
-
 sock = Sock(app)
 
 @sock.route("/v1/ws")
 def ws_agent_loop(ws):
     """
     WebSocket endpoint for the local agent session loop.
-
-    Always handles typed/tapped commands itself (deterministic demo logic).
-    When ASSEMBLYAI_API_KEY is configured, also opens a real connection to
-    AssemblyAI's Voice Agent API and proxies microphone audio to it, so real
-    speech gets transcribed and AssemblyAI's own agent (using this app's
-    system prompt + tool contracts) drives the spoken conversation. Without a
-    key, incoming mic audio is acknowledged as unavailable and the worker is
-    pointed at typed input instead.
     """
     session_id = request.args.get("session_id", "demo_session")
 
-    # Initialize conversation state
     state = state_manager.get_state(session_id)
     if not state:
         state = state_manager.create_session(user_id="worker_01", session_id=session_id)
@@ -304,33 +304,28 @@ def ws_agent_loop(ws):
         except Exception:
             pass
 
-    # Send session.ready
     safe_send({
         "type": "session.ready",
         "session_id": session_id,
         "message": "Aura Voice Co-Pilot Connected."
     })
 
-    # Local session.update, sent to the browser for backward compatibility
-    # with the mock/demo flow (the browser currently ignores unknown fields).
     local_session_update = build_session_update(mode=state.mode.value)
     safe_send(local_session_update)
 
     def handle_user_text(user_text: str):
-        """Deterministic demo reply logic, shared by typed input and the
-        no-API-key mock voice fallback. (When a real AssemblyAI key is
-        configured, real voice turns are instead handled end-to-end by
-        AssemblyAI's own agent via on_assemblyai_event below.)"""
+        """Thin text ingress into the same tool dispatcher and state machine."""
         user_text = (user_text or "").strip()
         if not user_text:
             return
 
-        # Pending confirmation reply — handle BEFORE trigger-phrase detection
         current_state = state_manager.get_state(session_id)
-        if current_state and current_state.confirmation_status == ConfirmationStatus.PENDING:
+        if not current_state:
+            current_state = state
+
+        if current_state.confirmation_status == ConfirmationStatus.PENDING:
             lowered = user_text.lower()
-            confirmed = any(w in lowered for w in ["yes", "confirm", "ok", "yep"])
-            rejected = any(w in lowered for w in ["no", "cancel", "stop"])
+            confirmed = any(w in lowered for w in ["yes", "confirm", "ok", "yep", "file it"])
             pending_action = current_state.pending_action
             ok, payload = tool_dispatcher.confirmation_gate.verify_confirmation(
                 session_id=session_id,
@@ -344,19 +339,23 @@ def ws_agent_loop(ws):
                     "tool": pending_action,
                     "result": result,
                 })
+                safe_send({
+                    "type": "agent_reply",
+                    "text": "Report filed successfully." if pending_action == "create_near_miss" else "Action confirmed.",
+                    "mode": current_state.mode.value
+                })
             else:
                 safe_send({
                     "type": "agent_reply",
-                    "text": "Okay, cancelled." if rejected else "Please say 'yes' to confirm or 'no' to cancel.",
+                    "text": "Action cancelled." if not confirmed else "Confirmation required. Please say 'yes' or 'confirm'.",
                     "mode": current_state.mode.value,
                 })
             return
 
-        import re
         numbers = re.findall(r"[-+]?\d*\.\d+|\d+", user_text)
         if numbers and any(k in user_text.lower() for k in ["psi", "temp", "f", "c", "bar", "pressure", "reading"]):
             val = float(numbers[0])
-            param = "pressure" if "psi" in user_text.lower() or "pressure" in user_text.lower() else "temperature"
+            param = "pressure" if ("psi" in user_text.lower() or "pressure" in user_text.lower()) else "temperature"
             unit = "PSI" if "psi" in user_text.lower() else "F"
 
             thresh_res = tool_dispatcher.execute("check_safety_threshold", {
@@ -372,17 +371,21 @@ def ws_agent_loop(ws):
                     "alert": thresh_res,
                     "message": thresh_res.get("message")
                 })
+                safe_send({
+                    "type": "agent_reply",
+                    "text": f"WARNING: {thresh_res.get('message')}",
+                    "mode": current_state.mode.value
+                })
+                return
 
         if "report" in user_text.lower() or "near miss" in user_text.lower():
             state_manager.set_mode(session_id, "reporting")
-
-            current_state = state_manager.get_state(session_id)
             status_res = tool_dispatcher.execute("check_safety_status", {
                 "session_id": session_id,
                 "mode": "reporting",
-                "worker_id": current_state.user_id if current_state else state.user_id,
+                "worker_id": current_state.user_id,
                 "self_reported_clear": ("clear" in user_text.lower() or "safe" in user_text.lower()),
-                "last_threshold": current_state.last_threshold_reading if current_state else None
+                "last_threshold": current_state.last_threshold_reading
             })
 
             if not status_res.get("safe_to_report", True):
@@ -396,39 +399,45 @@ def ws_agent_loop(ws):
 
             safe_send({
                 "type": "agent_reply",
-                "text": "Starting near-miss report. What equipment and location were involved?",
+                "text": "Safety status verified clear. Walk me through what happened: location, equipment, and hazard.",
                 "mode": "reporting"
             })
 
-        elif "walk me through" in user_text.lower() or "procedure" in user_text.lower() or "next step" in user_text.lower():
+        elif "walk me through" in user_text.lower() or "procedure" in user_text.lower() or "next step" in user_text.lower() or "got it" in user_text.lower():
             state_manager.set_mode(session_id, "guided_ops")
-            curr_step = state.current_step or 1
+            curr_step = current_state.current_step or 1
 
             if "next step" in user_text.lower() or "got it" in user_text.lower() or "done" in user_text.lower():
                 step_res = tool_dispatcher.execute("get_next_step", {
                     "procedure": "proc_coolant_flush",
                     "current_step": curr_step
                 })
-                state.current_step = step_res.get("next_step_id") or curr_step
-                state_manager.update_state(state)
+                next_step = step_res.get("next_step_id") or curr_step
+                current_state.current_step = next_step
+                state_manager.update_state(current_state)
 
                 safe_send({
                     "type": "agent_reply",
                     "text": step_res.get("step_text"),
-                    "current_step": state.current_step,
+                    "current_step": current_state.current_step,
                     "mode": "guided_ops"
                 })
             else:
+                manual_res = tool_dispatcher.execute("query_manual_db", {
+                    "procedure": "proc_coolant_flush",
+                    "step": curr_step
+                })
+                step_text = manual_res.get("step_text") or f"Step {curr_step}: Inspect secondary coolant line connections for leaks."
                 safe_send({
                     "type": "agent_reply",
-                    "text": f"Step {curr_step}: Inspect secondary coolant reservoir line connections for leaks.",
+                    "text": step_text,
                     "current_step": curr_step,
                     "mode": "guided_ops"
                 })
         else:
             safe_send({
                 "type": "agent_reply",
-                "text": f"Aura received: '{user_text}'. Ready for next step or report field.",
+                "text": f"Aura standing by: '{user_text}'. Ready for next step or report field.",
                 "mode": state_manager.get_state(session_id).mode.value
             })
 
@@ -516,9 +525,10 @@ def ws_agent_loop(ws):
                 get_current_state()  # touch + recreate-if-expired so this turn can't crash
                 pending = turn_state["pending_tools"]
                 if pending:
-                    # Tool-call reply: run the tools and hand results back now.
                     turn_state["pending_tools"] = []
                     for call in pending:
+                        call_id = call.get("call_id") or call.get("tool_call_id") or call.get("id")
+                        name = call.get("name")
                         args = dict(call.get("arguments") or {})
                         args.setdefault("session_id", session_id)
                         result = None
