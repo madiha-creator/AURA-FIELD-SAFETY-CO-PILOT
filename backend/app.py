@@ -378,7 +378,20 @@ def ws_agent_loop(ws):
     turn_state = {"last_agent_text": "", "last_audio_chunk": None, "pending_tools": []}
 
     if config.ASSEMBLYAI_API_KEY:
-        real_session_update = build_session_update(mode=state.mode.value)
+        # Inline agent config per AssemblyAI's schema (agent_id is mutually
+        # exclusive with inline fields, so it is intentionally not sent).
+        base_update = build_session_update(mode=state.mode.value)["session"]
+        tools = [{**t, "type": "function"} for t in (base_update.get("tools") or [])]
+        real_session_update = {
+            "type": "session.update",
+            "session": {
+                "system_prompt": base_update.get("system_prompt", ""),
+                "greeting": base_update.get("greeting", ""),
+                "input": {"turn_detection": {"vad_threshold": 0.5}},
+                "output": {"voice": "vera"},
+                "tools": tools,
+            },
+        }
 
         def on_assemblyai_event(event: dict):
             etype = event.get("type")
