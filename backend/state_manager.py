@@ -122,7 +122,7 @@ class StateBackend(ABC):
 
 
 class InMemoryStateBackend(StateBackend):
-    def __init__(self, ttl_seconds: int = 30):
+    def __init__(self, ttl_seconds: int = 1800):  # 30 min: generous room for a real voice conversation
         self._store: dict[str, tuple[ConversationState, float]] = {}
         self.ttl_seconds = ttl_seconds
 

@@ -224,6 +224,13 @@ def ws_agent_loop(ws):
 
     tool_dispatcher = tool_dispatcher_mod.ToolDispatcher(state_manager, audit_logger)
 
+    def get_current_state():
+        """Never crash on a missing/expired session; recreate it in place."""
+        current = state_manager.get_state(session_id)
+        if current is None:
+            current = state_manager.create_session(user_id="worker_01", session_id=session_id)
+        return current
+
     send_lock = threading.Lock()
 
     def safe_send(payload: dict):
@@ -410,6 +417,7 @@ def ws_agent_loop(ws):
                     safe_send({"type": "reply.audio", "audio": audio})
 
             elif etype == "reply.done":
+                get_current_state()  # touch + recreate-if-expired so this turn can't crash
                 pending = turn_state["pending_tools"]
                 if pending:
                     # Tool-call reply: run the tools and hand results back now.
@@ -435,7 +443,7 @@ def ws_agent_loop(ws):
                     payload = {
                         "type": "agent_reply",
                         "text": text,
-                        "mode": state_manager.get_state(session_id).mode.value,
+                        "mode": get_current_state().mode.value,
                     }
                     if turn_state["last_audio_chunk"]:
                         payload["audio"] = turn_state["last_audio_chunk"]
