@@ -480,6 +480,38 @@ def ws_agent_loop(ws):
                 if text:
                     safe_send({"type": "transcript.user", "text": text})
 
+                # SAFETY-CRITICAL: complete pending write confirmations here,
+                # from the worker's own words, rather than trusting the LLM
+                # to re-invoke the write tool a second time on its own. A
+                # near-miss report must never silently fail to save because
+                # the model narrated "confirmed" without actually calling
+                # the tool again.
+                current = get_current_state()
+                if current and current.confirmation_status == ConfirmationStatus.PENDING:
+                    lowered = text.lower()
+                    confirmed = any(w in lowered for w in ["yes", "confirm", "ok", "yep", "correct"])
+                    rejected = any(w in lowered for w in ["no", "cancel", "stop"])
+                    if confirmed or rejected:
+                        pending_action = current.pending_action
+                        ok, confirmed_payload = tool_dispatcher.confirmation_gate.verify_confirmation(
+                            session_id=session_id, user_id=current.user_id, confirmed=confirmed,
+                        )
+                        if ok and confirmed_payload:
+                            try:
+                                result = tool_dispatcher.execute(pending_action, confirmed_payload, state_manager)
+                                reply_text = result.get("message") if isinstance(result, dict) else None
+                                reply_text = reply_text or "Report submitted."
+                            except Exception as e:
+                                print(f"[AURA] confirmed action '{pending_action}' failed: {e}", flush=True)
+                                reply_text = "Something went wrong saving that. Please try again."
+                        else:
+                            reply_text = "Okay, cancelled." if rejected else "Please say yes to confirm, or no to cancel."
+                        safe_send({
+                            "type": "agent_reply",
+                            "text": reply_text,
+                            "mode": get_current_state().mode.value,
+                        })
+
             elif etype == "transcript.agent":
                 turn_state["last_agent_text"] = event.get("text") or ""
 
@@ -499,22 +531,16 @@ def ws_agent_loop(ws):
                         name = call.get("name")
                         args = dict(call.get("arguments") or {})
                         args.setdefault("session_id", session_id)
+                        result = None
                         try:
-                            result = tool_dispatcher.execute(name, args, state_manager)
-                            payload = {
-                                "type": "tool.result",
-                                "call_id": call_id,
-                                "result": json.dumps(result, default=str),
-                                "is_error": False
-                            }
+                            result = tool_dispatcher.execute(call.get("name"), args, state_manager)
+                            result_str = json.dumps(result, default=str)
                         except Exception as e:
-                            payload = {
-                                "type": "tool.result",
-                                "call_id": call_id,
-                                "result": json.dumps({"error": str(e)}),
-                                "is_error": True
-                            }
-
+                            print(f"[AURA] tool '{call.get('name')}' failed: {e}", flush=True)
+                            result_str = json.dumps({"error": str(e)})
+                        # call_id (not tool_call_id) per AssemblyAI's actual schema;
+                        # extra fields like is_error are rejected, so send only these two.
+                        payload = {"type": "tool.result", "call_id": call.get("call_id"), "result": result_str}
                         if assemblyai_proxy:
                             assemblyai_proxy.send_json(payload)
                         # Surface safety alerts to the browser UI
