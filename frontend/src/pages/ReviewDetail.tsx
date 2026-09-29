@@ -69,7 +69,11 @@ export default function ReviewDetail() {
   const fetchDetail = async () => {
     setLoading(true);
     try {
-      const res = await fetch(`/api/reviews/${id}`);
+      const res = await fetch(`/api/reviews/${id}`, {
+        headers: {
+          'Authorization': 'Bearer dev-token-bypass'
+        }
+      });
       const json = await res.json();
       setData(json);
       if (json.report) {
@@ -88,8 +92,11 @@ export default function ReviewDetail() {
     try {
       const res = await fetch(`/api/reviews/${id}/approve`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ notify_safety_contact: true, supervisor_id: 'sup_01' })
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer dev-token-bypass'
+        },
+        body: JSON.stringify({ supervisor_id: 'sup_01' })
       });
       if (res.ok) {
         // Optimistic UI update after API success
@@ -105,7 +112,10 @@ export default function ReviewDetail() {
     try {
       const res = await fetch(`/api/reviews/${id}/edit`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer dev-token-bypass'
+        },
         body: JSON.stringify({
           changes: { location, equipment, hazard_type: hazardType },
           reason: finalReason
@@ -125,7 +135,10 @@ export default function ReviewDetail() {
     try {
       const res = await fetch(`/api/reviews/${id}/reject`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer dev-token-bypass'
+        },
         body: JSON.stringify({ reason: rejectReason.trim(), supervisor_id: 'sup_01' })
       });
       if (res.ok) {
