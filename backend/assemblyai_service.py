@@ -169,9 +169,42 @@ def handle_user_transcript(message: dict, state_manager) -> list[dict]:
     return []
 
 
-def handle_reply_done(message: dict, state_manager) -> list[dict]:
-    """Handle reply.done status (completed vs interrupted)."""
-    return []
+def accumulate_agent_delta(event: dict, turn_state: dict) -> None:
+    """Append incremental agent transcript text to the active turn."""
+    delta = event.get("delta") or event.get("text") or ""
+    turn_state["last_agent_text"] = turn_state.get("last_agent_text", "") + delta
+
+
+def handle_reply_done(
+    message: dict,
+    state_manager,
+    turn_state: Optional[dict] = None,
+    mode: Optional[str] = None,
+) -> list[dict]:
+    """Build a browser reply only for completed turns, then clear turn output."""
+    if turn_state is None:
+        return []
+
+    text = (turn_state.get("last_agent_text") or "").strip()
+    audio = turn_state.get("last_audio_chunk")
+    completed = message.get("status") == "completed" and message.get("interrupted") is not True
+
+    turn_state["last_agent_text"] = ""
+    turn_state["last_audio_chunk"] = None
+
+    if not completed:
+        return []
+
+    state = state_manager.get_state(message.get("session_id", "")) if message.get("session_id") else None
+    mode = mode or (state.mode.value if state else "guided_ops")
+    payload = {
+        "type": "agent_reply",
+        "text": text or "Ready for the next step.",
+        "mode": mode,
+    }
+    if audio:
+        payload["audio"] = audio
+    return [payload]
 
 
 def handle_session_ready(message: dict, state_manager) -> list[dict]:
