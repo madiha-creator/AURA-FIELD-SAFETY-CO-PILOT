@@ -334,12 +334,12 @@ def ws_agent_loop(ws):
         current_state = state_manager.get_state(session_id)
         if current_state and current_state.confirmation_status == ConfirmationStatus.PENDING:
             lowered = user_text.lower()
-            confirmed = any(w in lowered for w in ["yes", "confirm", "ok", "yep"])
             rejected = any(w in lowered for w in ["no", "cancel", "stop"])
+            confirmed = not rejected and any(w in lowered for w in ["yes", "confirm", "ok", "yep"])
             pending_action = current_state.pending_action
             ok, payload = tool_dispatcher.confirmation_gate.verify_confirmation(
                 session_id=session_id,
-                worker_id=current_state.user_id,
+                user_id=current_state.user_id,
                 confirmed=confirmed,
             )
             if ok and payload:
@@ -488,8 +488,8 @@ def ws_agent_loop(ws):
                 current = get_current_state()
                 if current and current.confirmation_status == ConfirmationStatus.PENDING:
                     lowered = text.lower()
-                    confirmed = any(w in lowered for w in ["yes", "confirm", "ok", "yep", "correct"])
                     rejected = any(w in lowered for w in ["no", "cancel", "stop"])
+                    confirmed = not rejected and any(w in lowered for w in ["yes", "confirm", "ok", "yep", "correct"])
                     if confirmed or rejected:
                         pending_action = current.pending_action
                         ok, confirmed_payload = tool_dispatcher.confirmation_gate.verify_confirmation(
@@ -498,8 +498,16 @@ def ws_agent_loop(ws):
                         if ok and confirmed_payload:
                             try:
                                 result = tool_dispatcher.execute(pending_action, confirmed_payload, state_manager)
-                                reply_text = result.get("message") if isinstance(result, dict) else None
-                                reply_text = reply_text or "Report submitted."
+                                safe_send({
+                                    "type": "tool.result",
+                                    "tool": pending_action,
+                                    "result": result,
+                                })
+                                if isinstance(result, dict) and result.get("error"):
+                                    reply_text = str(result["error"])
+                                else:
+                                    reply_text = result.get("message") if isinstance(result, dict) else None
+                                    reply_text = reply_text or "Report submitted."
                             except Exception as e:
                                 print(f"[AURA] confirmed action '{pending_action}' failed: {e}", flush=True)
                                 reply_text = "Something went wrong saving that. Please try again."
@@ -525,7 +533,9 @@ def ws_agent_loop(ws):
             elif etype == "reply.done":
                 get_current_state()  # touch + recreate-if-expired so this turn can't crash
                 pending = turn_state["pending_tools"]
-                if pending:
+                if pending and event.get("status") != "completed":
+                    turn_state["pending_tools"] = []
+                elif pending:
                     # Tool-call reply: run the tools and hand results back now.
                     turn_state["pending_tools"] = []
                     for call in pending:

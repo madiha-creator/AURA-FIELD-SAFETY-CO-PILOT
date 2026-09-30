@@ -197,9 +197,10 @@ def handle_reply_done(
 
     state = state_manager.get_state(message.get("session_id", "")) if message.get("session_id") else None
     mode = mode or (state.mode.value if state else "guided_ops")
+    reply_text = text or ("" if audio else "Sorry, I didn't catch that. Could you repeat?")
     payload = {
         "type": "agent_reply",
-        "text": text or "Ready for the next step.",
+        "text": reply_text,
         "mode": mode,
     }
     if audio:
